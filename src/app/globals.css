@@ -1,0 +1,245 @@
+@import "tailwindcss";
+
+/* ==================== 童趣温暖主题 - 参考「找找乐」风格
+   面向 3-8 岁儿童与父母，温暖、圆润、活泼
+   配色：奶油黄 / 薄荷绿 / 暖橙 / 深青蓝 ==================== */
+:root {
+  --background: #fff9ea;            /* 奶油黄背景（参考找找乐 --cream） */
+  --foreground: #304957;            /* 深青蓝文字（参考找找乐 --ink，柔和不刺眼） */
+  --primary: #ff8b4a;              /* 暖橙主色（参考找找乐 --orange，CTA / 品牌色） */
+  --primary-foreground: #ffffff;
+  --primary-light: #fee9d6;
+  --primary-soft: #fde0c2;
+  --primary-shadow: #db6b37;        /* 立体按钮底部阴影色 */
+  --secondary: #3B82C4;             /* 湖蓝（次要按钮 / 信息链接） */
+  --secondary-foreground: #ffffff;
+  --secondary-light: #E0EBFF;
+  --accent: #ff8b4a;                /* 暖橙强调（同 primary，统一童趣感） */
+  --accent-foreground: #ffffff;
+  --mint: #dff5e8;                  /* 薄荷绿（参考找找乐 --mint） */
+  --beige: #fff9ec;                 /* 米色背景（参考找找乐卡片底） */
+  --hill: #6FCBA8;                  /* 山绿 */
+  --sun: #ffd761;                   /* 太阳黄（参考找找乐 --yellow） */
+  --peach: #ffcf6b;                 /* 桃黄（callout 背景） */
+  --lavender: #ECE4FB;              /* 薰衣草 */
+  --sky: #DCEFFF;                   /* 天蓝 */
+  --muted: #fff9ec;
+  --muted-foreground: #64787f;      /* 参考查找乐 tip 文字色 */
+  --border: #e7e0cd;                /* 米色描边（参考找找乐 --line） */
+  --ring: #ff8b4a;
+  --success: #16a34a;
+  --warning: #f59e0b;
+  --destructive: #dc2626;
+  --card: #ffffff;
+  --card-foreground: #304957;
+  --radius: 2rem;                   /* 超大圆角（参考找找乐 32px，更"软乎乎"） */
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-light: var(--primary-light);
+  --color-primary-soft: var(--primary-soft);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary-light: var(--secondary-light);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-mint: var(--mint);
+  --color-beige: var(--beige);
+  --color-hill: var(--hill);
+  --color-sun: var(--sun);
+  --color-peach: var(--peach);
+  --color-lavender: var(--lavender);
+  --color-sky: var(--sky);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-destructive: var(--destructive);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --font-sans: var(--font-nunito), "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-display: var(--font-baloo), "Baloo 2", "Nunito", -apple-system, sans-serif;   /* 圆润标题字体（参考找找乐） */
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --radius-sm: calc(var(--radius) - 8px);
+  --radius-md: calc(var(--radius) - 6px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 6px);
+}
+
+body {
+  background: linear-gradient(180deg, #fff9ea 0%, #fffdf6 52%, #e9faee 100%);
+  background-attachment: fixed;
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-weight: 700;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 标题统一使用圆润字体（童趣感） */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display), var(--font-sans), sans-serif;
+  letter-spacing: -0.01em;
+}
+
+/* ==================== 工具类 ==================== */
+.container-app {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+@media (min-width: 768px) {
+  .container-app {
+    padding: 0 2rem;
+  }
+}
+
+/* 网格字母样式 - 更圆润、更友好 */
+.grid-letter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display), var(--font-mono), monospace;
+  font-weight: 600;
+  user-select: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border-radius: 0.5rem;
+}
+
+.grid-letter:hover {
+  background: var(--primary-light);
+  transform: scale(1.05);
+}
+
+.grid-letter.selected {
+  background: var(--secondary);
+  color: var(--secondary-foreground);
+  transform: scale(1.08);
+}
+
+.grid-letter.found {
+  background: var(--mint);
+  color: var(--hill);
+}
+
+/* 滚动条样式 - 更圆润 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--muted);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--hill);
+  border-radius: 9999px;
+  border: 2px solid var(--muted);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+}
+
+/* 打印样式 */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  body {
+    background: white;
+  }
+
+  .puzzle-grid {
+    page-break-inside: avoid;
+  }
+}
+
+.print-only {
+  display: none;
+}
+
+/* 童趣风格 - Credits 胶囊 */
+.credits-pill {
+  background: var(--mint);
+  color: #047857;
+  border-radius: 9999px;
+  padding: 0.5rem 1rem;
+  font-weight: 600;
+  font-size: 0.875rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+/* Hero SVG波浪分割线 */
+.wave-divider {
+  position: absolute;
+  top: 0;
+  left: -80px;
+  width: 180px;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* ==================== 童趣装饰工具类 ==================== */
+
+/* 柔和的浮动动画（用于装饰元素） */
+@keyframes float-soft {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+.animate-float-soft {
+  animation: float-soft 4s ease-in-out infinite;
+}
+
+@keyframes wiggle {
+  0%, 100% { transform: rotate(-3deg); }
+  50% { transform: rotate(3deg); }
+}
+
+.animate-wiggle {
+  animation: wiggle 2.5s ease-in-out infinite;
+}
+
+/* ==================== 立体「积木」按钮（参考找找乐 .new-game） ==================== */
+.btn-pop {
+  box-shadow: 0 5px 0 var(--primary-shadow);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.btn-pop:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 0 var(--primary-shadow);
+}
+
+.btn-pop:active {
+  transform: translateY(4px);
+  box-shadow: 0 1px 0 var(--primary-shadow);
+}
+
+/* 隐藏滚动条但保留可滚动能力（用于移动端横向chips导航） */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}

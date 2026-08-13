@@ -1,0 +1,67 @@
+import { NextResponse } from "next/server"
+import { getPrisma } from "@/lib/prisma"
+import { auth } from "@/lib/auth"
+
+/** GET /api/puzzle/history — 获取登录用户的谜题和游戏记录 */
+export async function GET() {
+  try {
+    const session = await auth()
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Login required" }, { status: 401 })
+    }
+
+    const prisma = await getPrisma()
+
+    const puzzles = await prisma.puzzleHistory.findMany({
+      where: { userId: session.user.id },
+      orderBy: { createdAt: "desc" },
+      include: {
+        gameRecords: {
+          orderBy: { createdAt: "desc" },
+          take: 5, // 每个谜题最近5次游戏记录
+        },
+      },
+      take: 50,
+    })
+
+    const result = puzzles.map((p) => {
+      const gridData = p.gridData as { grid: string[][]; gridSize: number }
+      const answerKey = p.answerKey as {
+        placedWords: { word: string; row: number; col: number; direction: string; backward: boolean; cells: { row: number; col: number }[] }[]
+        unplacedWords: string[]
+      }
+      const settings = p.settings as Record<string, unknown>
+
+      const totalGames = p.gameRecords.length
+      const completedGames = p.gameRecords.filter((g) => g.completed).length
+
+      return {
+        id: p.id,
+        title: p.title,
+        words: p.words,
+        settings,
+        grid: gridData.grid,
+        gridSize: gridData.gridSize,
+        placedWords: answerKey.placedWords,
+        unplacedWords: answerKey.unplacedWords,
+        createdAt: p.createdAt,
+        gameStats: {
+          total: totalGames,
+          completed: completedGames,
+          recent: p.gameRecords.map((g) => ({
+            id: g.id,
+            foundWords: g.foundWords,
+            completed: g.completed,
+            durationSec: g.durationSec,
+            createdAt: g.createdAt,
+          })),
+        },
+      }
+    })
+
+    return NextResponse.json({ puzzles: result })
+  } catch (error) {
+    console.error("[puzzle/history] Error:", error)
+    return NextResponse.json({ error: "Failed to fetch history" }, { status: 500 })
+  }
+}

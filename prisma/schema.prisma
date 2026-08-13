@@ -1,0 +1,183 @@
+// Word Puzzle Generator - Prisma Schema
+// Learn more: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ==================== 用户系统 ====================
+
+model User {
+  id                  String        @id @default(cuid())
+  email               String        @unique
+  name                String?
+  emailVerified       DateTime?
+  image               String?
+  passwordHash        String?
+  role                String        @default("user") // user | admin
+  creditBalance       Int           @default(50) // 新注册赠送50次
+  subscriptionTier    String        @default("free") // free | basic | pro
+  subscriptionStatus  String        @default("active") // active | canceled | expired
+
+  accounts            Account[]
+  sessions            Session[]
+  puzzleHistories     PuzzleHistory[]
+  gameRecords         GameRecord[]
+  creditTransactions  CreditTransaction[]
+  subscriptions       Subscription[]
+
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ==================== 游戏历史记录 ====================
+
+model PuzzleHistory {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String   @default("Untitled Puzzle")
+  words     Json     // 单词列表（JSON-encoded array for SQLite compatibility）
+  settings  Json     // 生成设置（方向、大小写、网格大小等）
+  gridData  Json     // 生成的网格数据
+  answerKey Json     // 答案坐标
+  pdfUrl    String?  // PDF文件URL（Vercel Blob）
+  isPublic  Boolean  @default(false) // 是否公开分享
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gameRecords GameRecord[]
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("puzzle_histories")
+}
+
+// ==================== 游戏对局记录 ====================
+
+model GameRecord {
+  id           String   @id @default(cuid())
+  userId       String
+  puzzleId     String
+  foundWords   Json     // 本次找到的单词（JSON-encoded array for SQLite compatibility）
+  completed    Boolean  @default(false)
+  durationSec  Int?     // 完成耗时（秒）
+
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  puzzle       PuzzleHistory @relation(fields: [puzzleId], references: [id], onDelete: Cascade)
+
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+  @@index([puzzleId])
+  @@map("game_records")
+}
+
+// ==================== 预设词库 ====================
+
+model PresetWordList {
+  id          String   @id @default(cuid())
+  name        String   // 词库名称，如 "1st Grade Animals"
+  slug        String   @unique // URL友好标识
+  gradeLevel  String   // kindergarten | 1st | 2nd | ... | high-school
+  ageRange    String   // "5-6" | "7-8" 等
+  category    String   // animals | fruits | colors | science 等
+  difficulty  String   @default("easy") // easy | medium | hard
+  words       Json     // 单词列表（JSON-encoded array for SQLite compatibility）
+  description String?
+  isPublic    Boolean  @default(true)
+  createdBy   String?  // 管理员ID
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([gradeLevel])
+  @@index([category])
+  @@map("preset_word_lists")
+}
+
+// ==================== 订阅系统 ====================
+
+model Subscription {
+  id                    String   @id @default(cuid())
+  userId                String
+  tier                  String   // free | basic | pro
+  status                String   // active | canceled | expired | past_due
+  stripeSubscriptionId  String?  @unique
+  stripeCustomerId      String?
+  stripePriceId         String?
+  currentPeriodStart    DateTime?
+  currentPeriodEnd      DateTime?
+  cancelAtPeriodEnd     Boolean  @default(false)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@map("subscriptions")
+}
+
+// ==================== Credit交易记录 ====================
+
+model CreditTransaction {
+  id          String   @id @default(cuid())
+  userId      String
+  amount      Int      // 正数=充值，负数=消耗
+  type        String   // purchase | gift | usage | subscription | refund
+  description String
+  stripePaymentIntentId String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("credit_transactions")
+}
