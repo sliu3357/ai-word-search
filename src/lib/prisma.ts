@@ -21,19 +21,22 @@ function resolveDatabaseUrl(): string {
 
 /**
  * Build a Prisma driver adapter for the resolved URL.
- * - postgresql://... URLs use @prisma/adapter-neon + @neondatabase/serverless
- *   (Neon serverless driver; works over HTTPS, good for Vercel/Edge too)
+ * - postgresql://... URLs use @prisma/adapter-neon (Prisma 7.x API: pass a
+ *   PoolConfig directly — PrismaNeon manages its own Pool internally)
  * - file:... URLs fall back to @prisma/adapter-better-sqlite3 for local dev
+ *
+ * NOTE on Prisma 7 @prisma/adapter-neon API change:
+ *   BEFORE (adapter <= 0.x):  new PrismaNeon(poolInstance)
+ *   AFTER  (adapter ~= 7.x):  new PrismaNeon(poolConfigObject)
+ * Passing a pre-built Pool instance yields undefined host/user/db since the
+ * adapter iterates the config looking for PoolConfig keys like `connectionString`.
  */
 async function createAdapterFor(url: string): Promise<any> {
   if (url.startsWith("postgres://") || url.startsWith("postgresql://")) {
-    const { Pool, neon } = await import("@neondatabase/serverless")
+    // Import only the types; @prisma/adapter-neon will internally import
+    // @neondatabase/serverless Pool when it calls connect().
     const { PrismaNeon } = await import("@prisma/adapter-neon")
-    // Pool is recommended by Neon for long-lived server contexts;
-    // neon() is fine for short lived invocations — Pool is API-compatible
-    // with the adapter and keeps websocket/HTTPS sessions warm.
-    const pool = new Pool({ connectionString: url })
-    return new PrismaNeon(pool as any)
+    return new PrismaNeon({ connectionString: url })
   }
 
   // Local SQLite fallback
