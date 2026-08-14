@@ -71,8 +71,9 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error("[auth/register] Error:", error)
+    const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
     return NextResponse.json(
-      { error: "Failed to create account. Please try again." },
+      { error: "Failed to create account. Please try again.", detail },
       { status: 500 }
     )
   }
