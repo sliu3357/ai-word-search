@@ -31,10 +31,19 @@ export async function GET() {
       by: ["role"],
       _count: { _all: true },
     })
-    // 拿几个 sample id，方便确认是否有数据
-    const sampleUsers = await prisma.user.findMany({
-      take: 10,
-      select: { id: true, role: true, email: false, passwordHash: false },
+    // 拿几个 sample id + 邮箱脱敏摘要（前 3 字符 + 域名），方便确认 promote 是否命中
+    const sampleUsersRaw = await prisma.user.findMany({
+      take: 20,
+      select: { id: true, role: true, email: true, passwordHash: false },
+    })
+    const sampleUsers = sampleUsersRaw.map((u) => {
+      const [local, domain] = u.email.split("@")
+      const maskedLocal = local.slice(0, Math.min(3, local.length)) + "…"
+      return {
+        id: u.id.slice(0, 8) + "...",
+        role: u.role,
+        emailMasked: `${maskedLocal}@${domain ?? "?"}`,
+      }
     })
 
     let me: any = null
@@ -67,6 +76,12 @@ export async function GET() {
           ? `len=${process.env.ADMIN_SEED_PASSWORD.length}`
           : "MISSING",
       },
+      promoteTargetMasked: (() => {
+        const pe = (process.env.ADMIN_PROMOTE_EMAIL || "").trim().toLowerCase()
+        if (!pe) return null
+        const [local, domain] = pe.split("@")
+        return `${local.slice(0, Math.min(3, local.length))}…@${domain ?? "?"}`
+      })(),
       totalUsers,
       roleBreakdown: roleBreakdown.map((r) => ({
         role: r.role,
