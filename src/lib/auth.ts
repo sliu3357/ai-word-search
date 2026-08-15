@@ -112,8 +112,9 @@ const authUrl = process.env.AUTH_URL || process.env.NEXTAUTH_URL || undefined
 export const { handlers: rawHandlers, auth, signIn, signOut } = NextAuth({
   // 全开 debug，直到 Google 登录问题解决
   debug: true,
-  // @ts-ignore adapter 可以接受 Promise 包裹的 prisma 客户端
-  adapter: getAdapter(),
+  // 临时去掉 adapter 排查 Configuration 错误
+  // // @ts-ignore adapter 可以接受 Promise 包裹的 prisma 客户端
+  // adapter: getAdapter(),
   trustHost,
   ...(authUrl ? { url: authUrl } : {}),
   session: {
@@ -173,21 +174,38 @@ async function wrapHandler(
 ): Promise<Response> {
   try {
     const resp = await original(req, ctx)
+    // 检查是否 redirect 到 error 页面（Configuration 等错误不抛异常，而是返回 redirect）
+    const location = resp?.headers?.get?.("location") ?? resp?.headers?.get?.("Location")
+    if (location && /\/api\/auth\/error/.test(location)) {
+      const body = JSON.stringify({
+        interceptedError: true,
+        method: name,
+        requestUrl: typeof req?.url === "string" ? req.url : String(req?.url ?? ""),
+        redirectLocation: location,
+        adapterDisabled: true,
+        hint: "NextAuth 内部返回了 redirect 到 error 页面，而不是正常 redirect 到 Google OAuth",
+      }, null, 2)
+      console.error(`[NEXT_AUTH_REDIRECT_TO_ERROR_${name}] location=${location} requestUrl=${req?.url}`)
+      return new Response(body, {
+        status: 500,
+        headers: { "content-type": "application/json" },
+      })
+    }
     return resp
   } catch (err: any) {
-    try {
-      const errName = err?.name ?? "UnknownError"
-      const msg = err?.message ?? String(err)
-      const stack = (err?.stack ?? "").slice(0, 2500)
-      const cause = String((err as any)?.cause ?? "")
-      const kind = String((err as any)?.kind ?? "")
-      console.error(
-        `[NEXT_AUTH_FATAL_${name}] kind=${kind} | name=${errName} | message=${msg} | cause=${cause} | stack=${stack}`
-      )
-    } catch (e2) {
-      console.error(`[NEXT_AUTH_FATAL_${name}_BAIL]`, String(err), e2)
-    }
-    throw err
+    const body = JSON.stringify({
+      caughtException: true,
+      method: name,
+      errName: err?.name ?? "UnknownError",
+      errMessage: err?.message ?? String(err),
+      errStack: (err?.stack ?? "").slice(0, 3000),
+      errCause: String((err as any)?.cause ?? ""),
+    }, null, 2)
+    console.error(`[NEXT_AUTH_FATAL_${name}] name=${err?.name} | message=${err?.message} | stack=${(err?.stack ?? "").slice(0, 2000)}`)
+    return new Response(body, {
+      status: 500,
+      headers: { "content-type": "application/json" },
+    })
   }
 }
 
