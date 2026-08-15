@@ -16,6 +16,75 @@ function getAdapter() {
   return PrismaAdapter(prismaPromise as unknown as PrismaClientType)
 }
 
+function hasValidGoogleCredentials() {
+  const id = process.env.AUTH_GOOGLE_ID
+  const secret = process.env.AUTH_GOOGLE_SECRET
+  if (!id || !secret) return false
+  if (id === "placeholder" || secret === "placeholder") return false
+  return id.length > 0 && secret.length > 0
+}
+
+export const googleEnabled = hasValidGoogleCredentials()
+if (!googleEnabled && process.env.NODE_ENV !== "test") {
+  console.warn(
+    "[auth] Google OAuth is disabled because AUTH_GOOGLE_ID / AUTH_GOOGLE_SECRET are missing or still set to placeholder. Set both environment variables and redeploy to enable Google sign-in."
+  )
+}
+
+const providers: any[] = [
+  Credentials({
+    name: "credentials",
+    credentials: {
+      email: { label: "Email", type: "email" },
+      password: { label: "Password", type: "password" },
+    },
+    async authorize(credentials) {
+      if (!credentials?.email || !credentials?.password) {
+        return null
+      }
+
+      try {
+        const prisma = await getPrisma()
+        const email = (credentials.email as string).toLowerCase().trim()
+        const user = await prisma.user.findUnique({
+          where: { email },
+        })
+
+        if (!user || !user.passwordHash) {
+          return null
+        }
+
+        const isValid = await bcrypt.compare(
+          credentials.password as string,
+          user.passwordHash
+        )
+
+        if (!isValid) return null
+
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name ?? undefined,
+          image: user.image ?? undefined,
+        }
+      } catch (e) {
+        console.error("[auth authorize] Error:", (e as Error).message)
+        return null
+      }
+    },
+  }),
+]
+
+if (googleEnabled) {
+  providers.unshift(
+    Google({
+      clientId: process.env.AUTH_GOOGLE_ID,
+      clientSecret: process.env.AUTH_GOOGLE_SECRET,
+      allowDangerousEmailAccountLinking: true,
+    })
+  )
+}
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   // @ts-ignore adapter 可以接受 Promise 包裹的 prisma 客户端
   adapter: getAdapter(),
@@ -25,54 +94,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   pages: {
     signIn: "/login",
   },
-  providers: [
-    Google({
-      clientId: process.env.AUTH_GOOGLE_ID,
-      clientSecret: process.env.AUTH_GOOGLE_SECRET,
-      allowDangerousEmailAccountLinking: true,
-    }),
-    Credentials({
-      name: "credentials",
-      credentials: {
-        email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" },
-      },
-      async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
-          return null
-        }
-
-        try {
-          const prisma = await getPrisma()
-          const email = (credentials.email as string).toLowerCase().trim()
-          const user = await prisma.user.findUnique({
-            where: { email },
-          })
-
-          if (!user || !user.passwordHash) {
-            return null
-          }
-
-          const isValid = await bcrypt.compare(
-            credentials.password as string,
-            user.passwordHash
-          )
-
-          if (!isValid) return null
-
-          return {
-            id: user.id,
-            email: user.email,
-            name: user.name ?? undefined,
-            image: user.image ?? undefined,
-          }
-        } catch (e) {
-          console.error("[auth authorize] Error:", (e as Error).message)
-          return null
-        }
-      },
-    }),
-  ],
+  providers,
   callbacks: {
     async jwt({ token, user }) {
       if (user) {

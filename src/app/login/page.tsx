@@ -34,8 +34,26 @@ function LoginPageContent() {
   const [password, setPassword] = React.useState("")
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+  const [googleEnabled, setGoogleEnabled] = React.useState<boolean | null>(null)
 
   const callbackUrl = searchParams.get("callbackUrl") || "/dashboard"
+
+  // 拉取后端 auth 配置（哪些 provider 可用）
+  React.useEffect(() => {
+    let cancelled = false
+    fetch("/api/auth/config", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("auth/config fetch failed"))))
+      .then((data) => {
+        if (cancelled) return
+        setGoogleEnabled(Boolean(data?.googleEnabled))
+      })
+      .catch(() => {
+        if (!cancelled) setGoogleEnabled(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   // 已登录用户自动跳转
   React.useEffect(() => {
@@ -103,26 +121,30 @@ function LoginPageContent() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full"
-                  onClick={handleGoogle}
-                >
-                  <GoogleIcon className="h-4 w-4" />
-                  Continue with Google
-                </Button>
+                {googleEnabled === true && (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full"
+                      onClick={handleGoogle}
+                    >
+                      <GoogleIcon className="h-4 w-4" />
+                      Continue with Google
+                    </Button>
 
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t border-border" />
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-card px-2 text-muted-foreground">
-                      Or continue with email
-                    </span>
-                  </div>
-                </div>
+                    <div className="relative">
+                      <div className="absolute inset-0 flex items-center">
+                        <span className="w-full border-t border-border" />
+                      </div>
+                      <div className="relative flex justify-center text-xs uppercase">
+                        <span className="bg-card px-2 text-muted-foreground">
+                          Or continue with email
+                        </span>
+                      </div>
+                    </div>
+                  </>
+                )}
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div className="space-y-2">
