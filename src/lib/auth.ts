@@ -4,6 +4,7 @@ import Google from "next-auth/providers/google"
 import Credentials from "next-auth/providers/credentials"
 import bcrypt from "bcryptjs"
 import { getPrisma } from "@/lib/prisma"
+import { seedAdminIfNeeded } from "@/lib/admin"
 import type { PrismaClient as PrismaClientType } from "@/generated/prisma/client"
 
 /**
@@ -129,6 +130,13 @@ export const { handlers: rawHandlers, auth, signIn, signOut } = NextAuth({
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id
+      }
+      // 确保至少有一个管理员（如果环境变量配置了的话）。
+      // 在 jwt 回调里触发，保证用户登录后 /admin 页面可用。
+      try {
+        await seedAdminIfNeeded()
+      } catch (e) {
+        console.warn("[auth jwt] seedAdminIfNeeded skipped:", (e as Error).message)
       }
       if (token.email) {
         try {
