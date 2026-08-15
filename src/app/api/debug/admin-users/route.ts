@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server"
 import { getPrisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
+import { seedAdminIfNeeded } from "@/lib/admin"
 
 export const dynamic = "force-dynamic"
 
 /**
  * 管理员账号诊断端点：
+ * 0. 主动尝试一次 seed（读环境变量升级/创建管理员），方便验证配置是否生效
  * 1. 输出数据库里所有用户的角色分布（不输出 email / passwordHash）
  * 2. 如果当前 session 是已登录用户，返回其本人的 role 情况
  *
@@ -13,6 +15,16 @@ export const dynamic = "force-dynamic"
  */
 export async function GET() {
   try {
+    // 主动触发一次 seed，便于验证 env var 是否被正确读取
+    let seedTried = false
+    let seedResult: any = "skipped"
+    try {
+      seedTried = true
+      await seedAdminIfNeeded()
+      seedResult = "ok"
+    } catch (se: any) {
+      seedResult = { error: (se as Error).message }
+    }
     const prisma = await getPrisma()
     const totalUsers = await prisma.user.count()
     const roleBreakdown = await prisma.user.groupBy({
@@ -41,6 +53,20 @@ export async function GET() {
 
     return NextResponse.json({
       ok: true,
+      seedTried,
+      seedResult,
+      // 把管理员相关 env 摘要也打出来（只打印长度，不泄露值）
+      adminEnv: {
+        ADMIN_PROMOTE_EMAIL: process.env.ADMIN_PROMOTE_EMAIL
+          ? `len=${process.env.ADMIN_PROMOTE_EMAIL.length}`
+          : "MISSING",
+        ADMIN_SEED_EMAIL: process.env.ADMIN_SEED_EMAIL
+          ? `len=${process.env.ADMIN_SEED_EMAIL.length}`
+          : "MISSING",
+        ADMIN_SEED_PASSWORD: process.env.ADMIN_SEED_PASSWORD
+          ? `len=${process.env.ADMIN_SEED_PASSWORD.length}`
+          : "MISSING",
+      },
       totalUsers,
       roleBreakdown: roleBreakdown.map((r) => ({
         role: r.role,
