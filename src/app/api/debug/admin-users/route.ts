@@ -87,10 +87,7 @@ export async function GET() {
         role: r.role,
         count: r._count._all,
       })),
-      sampleUserIdsAndRoles: sampleUsers.map((u) => ({
-        id: u.id.slice(0, 8) + "...",
-        role: u.role,
-      })),
+      sampleUsers,
       currentSession: me,
       hint:
         totalUsers === 0
