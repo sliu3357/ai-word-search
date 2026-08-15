@@ -9,10 +9,11 @@ export function GET() {
     AUTH_GOOGLE_SECRET: process.env.AUTH_GOOGLE_SECRET ? `len=${process.env.AUTH_GOOGLE_SECRET.length}` : "MISSING",
     AUTH_SECRET: process.env.AUTH_SECRET ? `len=${process.env.AUTH_SECRET.length}` : "MISSING",
     AUTH_TRUST_HOST: String(process.env.AUTH_TRUST_HOST ?? "MISSING"),
-    AUTH_URL: process.env.AUTH_URL ?? "MISSING",
-    NEXTAUTH_URL: process.env.NEXTAUTH_URL ?? "MISSING",
+    AUTH_DEBUG: String(process.env.AUTH_DEBUG ?? "MISSING"),
+    AUTH_URL: process.env.AUTH_URL ? `len=${process.env.AUTH_URL.length}` : "MISSING",
+    NEXTAUTH_URL: process.env.NEXTAUTH_URL ? `len=${process.env.NEXTAUTH_URL.length}` : "MISSING",
     VERCEL: String(process.env.VERCEL ?? "MISSING"),
-    VERCEL_URL: process.env.VERCEL_URL ?? "MISSING",
+    VERCEL_URL: process.env.VERCEL_URL ? `len=${process.env.VERCEL_URL.length}` : "MISSING",
     NODE_ENV: process.env.NODE_ENV ?? "MISSING",
   }
   return NextResponse.json({
@@ -21,6 +22,7 @@ export function GET() {
       String(process.env.AUTH_TRUST_HOST ?? "").toLowerCase() === "true" ||
       Boolean(process.env.VERCEL) ||
       Boolean(process.env.VERCEL_URL),
+    authUrlComputed: (process.env.AUTH_URL || process.env.NEXTAUTH_URL) ? `len=${(process.env.AUTH_URL || process.env.NEXTAUTH_URL || "").length}` : "MISSING",
     env: summary,
   })
 }

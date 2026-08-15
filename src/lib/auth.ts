@@ -37,10 +37,11 @@ if (process.env.NODE_ENV !== "test") {
     AUTH_GOOGLE_SECRET: process.env.AUTH_GOOGLE_SECRET ? `len=${process.env.AUTH_GOOGLE_SECRET.length}` : "MISSING",
     AUTH_SECRET: process.env.AUTH_SECRET ? `len=${process.env.AUTH_SECRET.length}` : "MISSING",
     AUTH_TRUST_HOST: String(process.env.AUTH_TRUST_HOST ?? "MISSING"),
-    AUTH_URL: process.env.AUTH_URL ?? "MISSING",
-    NEXTAUTH_URL: process.env.NEXTAUTH_URL ?? "MISSING",
+    AUTH_DEBUG: String(process.env.AUTH_DEBUG ?? "MISSING"),
+    AUTH_URL: process.env.AUTH_URL ? `len=${process.env.AUTH_URL.length}` : "MISSING",
+    NEXTAUTH_URL: process.env.NEXTAUTH_URL ? `len=${process.env.NEXTAUTH_URL.length}` : "MISSING",
     VERCEL: String(process.env.VERCEL ?? "MISSING"),
-    VERCEL_URL: process.env.VERCEL_URL ?? "MISSING",
+    VERCEL_URL: process.env.VERCEL_URL ? `len=${process.env.VERCEL_URL.length}` : "MISSING",
     NODE_ENV: process.env.NODE_ENV ?? "MISSING",
   }
   console.log("[auth] env summary:", JSON.stringify(summary))
@@ -105,11 +106,16 @@ if (googleEnabled) {
   )
 }
 
+// 显式传入 url，确保 NextAuth 计算 redirect_uri 时用 https:// 前缀
+const authUrl = process.env.AUTH_URL || process.env.NEXTAUTH_URL || undefined
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  debug: process.env.NODE_ENV !== "production" || String(process.env.AUTH_DEBUG).toLowerCase() === "true",
+  // 全开 debug，直到 Google 登录问题解决
+  debug: true,
   // @ts-ignore adapter 可以接受 Promise 包裹的 prisma 客户端
   adapter: getAdapter(),
   trustHost,
+  ...(authUrl ? { url: authUrl } : {}),
   session: {
     strategy: "jwt",
   },
