@@ -123,6 +123,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     signIn: "/login",
   },
   providers,
+  events: {
+    error(error) {
+      try {
+        console.error(
+          "[NEXT_AUTH_FATAL] kind=" + (error as any)?.kind +
+          " | name=" + error?.name +
+          " | message=" + error?.message +
+          " | cause=" + String((error as any)?.cause ?? "") +
+          " | stack=" + (error?.stack ?? "").slice(0, 2000)
+        )
+      } catch (e2) {
+        console.error("[NEXT_AUTH_FATAL_BAIL]", String(error), e2)
+      }
+    },
+  },
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
