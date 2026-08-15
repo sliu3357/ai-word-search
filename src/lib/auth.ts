@@ -12,7 +12,6 @@ import type { PrismaClient as PrismaClientType } from "@/generated/prisma/client
  */
 function getAdapter() {
   const prismaPromise = getPrisma()
-  // PrismaAdapter 接受 PrismaClient 或 Promise<PrismaClient>，见文档
   return PrismaAdapter(prismaPromise as unknown as PrismaClientType)
 }
 
@@ -30,6 +29,27 @@ if (!googleEnabled && process.env.NODE_ENV !== "test") {
     "[auth] Google OAuth is disabled because AUTH_GOOGLE_ID / AUTH_GOOGLE_SECRET are missing or still set to placeholder. Set both environment variables and redeploy to enable Google sign-in."
   )
 }
+
+// 环境变量诊断（只打印长度，不打印原值），方便定位 Vercel 部署问题
+if (process.env.NODE_ENV !== "test") {
+  const summary: Record<string, string> = {
+    AUTH_GOOGLE_ID: process.env.AUTH_GOOGLE_ID ? `len=${process.env.AUTH_GOOGLE_ID.length}` : "MISSING",
+    AUTH_GOOGLE_SECRET: process.env.AUTH_GOOGLE_SECRET ? `len=${process.env.AUTH_GOOGLE_SECRET.length}` : "MISSING",
+    AUTH_SECRET: process.env.AUTH_SECRET ? `len=${process.env.AUTH_SECRET.length}` : "MISSING",
+    AUTH_TRUST_HOST: String(process.env.AUTH_TRUST_HOST ?? "MISSING"),
+    AUTH_URL: process.env.AUTH_URL ?? "MISSING",
+    NEXTAUTH_URL: process.env.NEXTAUTH_URL ?? "MISSING",
+    VERCEL: String(process.env.VERCEL ?? "MISSING"),
+    VERCEL_URL: process.env.VERCEL_URL ?? "MISSING",
+    NODE_ENV: process.env.NODE_ENV ?? "MISSING",
+  }
+  console.log("[auth] env summary:", JSON.stringify(summary))
+}
+
+const trustHost =
+  String(process.env.AUTH_TRUST_HOST ?? "").toLowerCase() === "true" ||
+  Boolean(process.env.VERCEL) ||
+  Boolean(process.env.VERCEL_URL)
 
 const providers: any[] = [
   Credentials({
@@ -86,8 +106,10 @@ if (googleEnabled) {
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  debug: process.env.NODE_ENV !== "production" || String(process.env.AUTH_DEBUG).toLowerCase() === "true",
   // @ts-ignore adapter 可以接受 Promise 包裹的 prisma 客户端
   adapter: getAdapter(),
+  trustHost,
   session: {
     strategy: "jwt",
   },
