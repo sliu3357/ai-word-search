@@ -109,7 +109,7 @@ if (googleEnabled) {
 // 显式传入 url，确保 NextAuth 计算 redirect_uri 时用 https:// 前缀
 const authUrl = process.env.AUTH_URL || process.env.NEXTAUTH_URL || undefined
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
+export const { handlers: rawHandlers, auth, signIn, signOut } = NextAuth({
   // 全开 debug，直到 Google 登录问题解决
   debug: true,
   // @ts-ignore adapter 可以接受 Promise 包裹的 prisma 客户端
@@ -123,21 +123,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     signIn: "/login",
   },
   providers,
-  events: {
-    error(error) {
-      try {
-        console.error(
-          "[NEXT_AUTH_FATAL] kind=" + (error as any)?.kind +
-          " | name=" + error?.name +
-          " | message=" + error?.message +
-          " | cause=" + String((error as any)?.cause ?? "") +
-          " | stack=" + (error?.stack ?? "").slice(0, 2000)
-        )
-      } catch (e2) {
-        console.error("[NEXT_AUTH_FATAL_BAIL]", String(error), e2)
-      }
-    },
-  },
+  // 不要加 events.error，这个版本的 next-auth v5 类型里没有 error 事件
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
@@ -173,3 +159,39 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
   },
 })
+
+/**
+ * 包一层 NextAuth handlers，捕获所有 handler 级抛出的错误（包括 Configuration）
+ * 用独特前缀 [NEXT_AUTH_FATAL_GET] / [NEXT_AUTH_FATAL_POST] 打日志，
+ * 这样在 Vercel Runtime Logs 里一搜就能看到真正的错误原因。
+ */
+async function wrapHandler(
+  name: "GET" | "POST",
+  req: any,
+  ctx: any,
+  original: (req: any, ctx: any) => Promise<Response> | Response
+): Promise<Response> {
+  try {
+    const resp = await original(req, ctx)
+    return resp
+  } catch (err: any) {
+    try {
+      const errName = err?.name ?? "UnknownError"
+      const msg = err?.message ?? String(err)
+      const stack = (err?.stack ?? "").slice(0, 2500)
+      const cause = String((err as any)?.cause ?? "")
+      const kind = String((err as any)?.kind ?? "")
+      console.error(
+        `[NEXT_AUTH_FATAL_${name}] kind=${kind} | name=${errName} | message=${msg} | cause=${cause} | stack=${stack}`
+      )
+    } catch (e2) {
+      console.error(`[NEXT_AUTH_FATAL_${name}_BAIL]`, String(err), e2)
+    }
+    throw err
+  }
+}
+
+export const handlers = {
+  GET: (req: any, ctx: any) => wrapHandler("GET", req, ctx, rawHandlers.GET),
+  POST: (req: any, ctx: any) => wrapHandler("POST", req, ctx, rawHandlers.POST),
+}
