@@ -172,9 +172,24 @@ async function wrapHandler(
   ctx: any,
   original: (req: any, ctx: any) => Promise<Response> | Response
 ): Promise<Response> {
+  // 收集 NextAuth debug 模式打印的 console 日志
+  const collected: string[] = []
+  const origLog = console.log
+  const origError = console.error
+  const origWarn = console.warn
+  const collect = (args: any[], prefix: string) => {
+    try {
+      const msg = args.map(a => typeof a === "string" ? a : JSON.stringify(a)).join(" ")
+      collected.push(`[${prefix}] ${msg.slice(0, 500)}`)
+    } catch {}
+  }
+  console.log = (...args: any[]) => { collect(args, "log"); origLog(...args) }
+  console.error = (...args: any[]) => { collect(args, "error"); origError(...args) }
+  console.warn = (...args: any[]) => { collect(args, "warn"); origWarn(...args) }
+
   try {
     const resp = await original(req, ctx)
-    // 检查是否 redirect 到 error 页面（Configuration 等错误不抛异常，而是返回 redirect）
+    // 检查是否 redirect 到 error 页面
     const location = resp?.headers?.get?.("location") ?? resp?.headers?.get?.("Location")
     if (location && /\/api\/auth\/error/.test(location)) {
       const body = JSON.stringify({
@@ -183,9 +198,11 @@ async function wrapHandler(
         requestUrl: typeof req?.url === "string" ? req.url : String(req?.url ?? ""),
         redirectLocation: location,
         adapterDisabled: true,
-        hint: "NextAuth 内部返回了 redirect 到 error 页面，而不是正常 redirect 到 Google OAuth",
+        consoleLogCount: collected.length,
+        consoleLogs: collected.slice(-30),
+        hint: "NextAuth 返回 redirect 到 error 页面，下方 consoleLogs 含 debug 模式输出",
       }, null, 2)
-      console.error(`[NEXT_AUTH_REDIRECT_TO_ERROR_${name}] location=${location} requestUrl=${req?.url}`)
+      origError(`[NEXT_AUTH_REDIRECT_TO_ERROR_${name}] location=${location} logs=${collected.length}`)
       return new Response(body, {
         status: 500,
         headers: { "content-type": "application/json" },
@@ -200,12 +217,18 @@ async function wrapHandler(
       errMessage: err?.message ?? String(err),
       errStack: (err?.stack ?? "").slice(0, 3000),
       errCause: String((err as any)?.cause ?? ""),
+      consoleLogCount: collected.length,
+      consoleLogs: collected.slice(-30),
     }, null, 2)
-    console.error(`[NEXT_AUTH_FATAL_${name}] name=${err?.name} | message=${err?.message} | stack=${(err?.stack ?? "").slice(0, 2000)}`)
+    origError(`[NEXT_AUTH_FATAL_${name}] name=${err?.name} | message=${err?.message}`)
     return new Response(body, {
       status: 500,
       headers: { "content-type": "application/json" },
     })
+  } finally {
+    console.log = origLog
+    console.error = origError
+    console.warn = origWarn
   }
 }
 
