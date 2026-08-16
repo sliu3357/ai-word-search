@@ -1,14 +1,15 @@
 import type { MetadataRoute } from "next"
 
-export default function robots(): MetadataRoute.Robots {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://word-puzzle-generator.vercel.app"
+const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://www.wordsearchai.top"
 
+export default function robots(): MetadataRoute.Robots {
   return {
     rules: {
       userAgent: "*",
       allow: "/",
-      disallow: ["/api/", "/dashboard/", "/login", "/register", "/settings/"],
+      disallow: ["/api/", "/admin/", "/dashboard/", "/login", "/register", "/settings/"],
     },
-    sitemap: `${baseUrl}/sitemap.xml`,
+    sitemap: new URL("/sitemap.xml", baseUrl).toString(),
+    host: baseUrl,
   }
 }
