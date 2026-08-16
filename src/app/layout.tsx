@@ -1,9 +1,9 @@
 import type { Metadata } from "next"
+import Script from "next/script"
 import { Baloo_2, Nunito } from "next/font/google"
 import "./globals.css"
 import { AppSessionProvider } from "@/components/providers/SessionProvider"
 
-// 童趣圆润标题字体（Baloo 2）+ 圆润正文字体（Nunito）—— 参考「找找乐」风格
 const baloo = Baloo_2({
   subsets: ["latin"],
   weight: ["500", "600", "700", "800"],
@@ -18,39 +18,43 @@ const nunito = Nunito({
   display: "swap",
 })
 
-const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://word-puzzle-generator.vercel.app"
+const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://www.wordsearchai.top"
+const gaMeasurementId = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID
 
 export const metadata: Metadata = {
   metadataBase: new URL(baseUrl),
   title: {
-    default: "Word Search Generator - Create Custom Printable Word Puzzles Free",
-    template: "%s | Word Puzzle Generator",
+    default: "Word Search Generator – Create Free Printable Puzzles",
+    template: "%s | Wordly",
   },
   description:
-    "Make custom word search puzzles with your own words. Free printable PDF, online play, and preset templates for teachers and kids. No signup needed to start.",
+    "Create custom word search puzzles from your own word lists. Free printable worksheets, online play, and ready-to-use templates for teachers, parents, and kids.",
   keywords: [
     "word search generator",
     "word search maker",
-    "word puzzle maker",
     "printable word search",
     "word search puzzle",
     "custom word search",
+    "vocabulary worksheet maker",
   ],
-  authors: [{ name: "Word Puzzle Generator" }],
-  creator: "Word Puzzle Generator",
+  authors: [{ name: "Wordly" }],
+  creator: "Wordly",
+  publisher: "Wordly",
+  alternates: { canonical: "/" },
   openGraph: {
     type: "website",
     locale: "en_US",
-    url: baseUrl,
-    siteName: "Word Puzzle Generator",
-    title: "Word Search Generator - Create Custom Printable Word Puzzles Free",
+    url: "/",
+    siteName: "Wordly",
+    title: "Word Search Generator – Create Free Printable Puzzles",
     description:
-      "Make custom word search puzzles with your own words. Free printable PDF and online play.",
+      "Make custom, printable word search puzzles in seconds for class, home, or play.",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Word Search Generator - Create Custom Word Puzzles",
-    description: "Make custom word search puzzles with your own words. Free and easy to use.",
+    title: "Word Search Generator – Create Free Printable Puzzles",
+    description:
+      "Make custom, printable word search puzzles in seconds for class, home, or play.",
   },
   robots: {
     index: true,
@@ -60,6 +64,7 @@ export const metadata: Metadata = {
       follow: true,
       "max-image-preview": "large",
       "max-snippet": -1,
+      "max-video-preview": -1,
     },
   },
 }
@@ -75,17 +80,32 @@ export default function RootLayout({
       className={`${baloo.variable} ${nunito.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
+        {gaMeasurementId ? (
+          <>
+            <Script
+              src={`https://www.googletagmanager.com/gtag/js?id=${gaMeasurementId}`}
+              strategy="afterInteractive"
+            />
+            <Script id="google-analytics" strategy="afterInteractive">
+              {`window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag("js", new Date());
+gtag("config", "${gaMeasurementId}", { anonymize_ip: true });`}
+            </Script>
+          </>
+        ) : null}
         <AppSessionProvider>
-          {/* WebApplication Schema */}
           <script
             type="application/ld+json"
             dangerouslySetInnerHTML={{
               __html: JSON.stringify({
                 "@context": "https://schema.org",
                 "@type": "WebApplication",
-                name: "Word Puzzle Generator",
+                name: "Wordly",
                 applicationCategory: "EducationApplication",
                 operatingSystem: "Web Browser",
+                description:
+                  "Create custom, printable word search puzzles for classrooms, homes, and learning activities.",
                 offers: {
                   "@type": "Offer",
                   price: "0",
