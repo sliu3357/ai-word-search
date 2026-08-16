@@ -32,7 +32,7 @@ import type {
   FontSize,
   PuzzleResult,
 } from "@/lib/word-search/types"
-import { generatePdf } from "@/lib/export/pdf"
+import { generatePdf } from "@/lib/export/pdf"\nimport { trackEvent } from "@/lib/analytics"
 
 // 合并所有模板，便于按 slug 查找
 const ALL_TEMPLATES = [...FEATURED_TEMPLATES, ...GRADE_TEMPLATES, ...THEME_TEMPLATES]
@@ -261,7 +261,7 @@ function WordSearchMakerContent() {
   const handleExportPdf = () => {
     if (!result) return
     try {
-      generatePdf(title || "Word Search Puzzle", result)
+      generatePdf(title || "Word Search Puzzle", result)\n      trackEvent("export_pdf", { word_count: result.placedWords.length })
     } catch (err) {
       console.error("PDF export failed:", err)
       setError("Failed to export PDF. Please try again.")
@@ -320,6 +320,11 @@ function WordSearchMakerContent() {
       // 保存新生成的 puzzleId（用于保存游戏记录）
       setLoadedPuzzleId(data.puzzleId ?? null)
       setPlayMode(false)
+      trackEvent("generate_puzzle", {
+        word_count: words.length,
+        difficulty: ageLevel,
+        template: Boolean(templateSlug),
+      })
 
       // 消耗了 credits 后刷新 session，让 Header 中的余额实时更新
       if (typeof data.remainingCredits === "number") {
