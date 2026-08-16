@@ -1,76 +1,26 @@
 import type { MetadataRoute } from "next"
 
-export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://word-puzzle-generator.vercel.app"
+const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://www.wordsearchai.top"
 
-  const staticPages = [
-    {
-      url: `${baseUrl}/`,
-      lastModified: new Date(),
-      changeFrequency: "weekly" as const,
-      priority: 1,
-    },
-    {
-      url: `${baseUrl}/ai-word-generator`,
-      lastModified: new Date(),
-      changeFrequency: "weekly" as const,
-      priority: 0.95,
-    },
-    {
-      url: `${baseUrl}/word-search-maker`,
-      lastModified: new Date(),
-      changeFrequency: "weekly" as const,
-      priority: 0.9,
-    },
-    {
-      url: `${baseUrl}/word-search-generator`,
-      lastModified: new Date(),
-      changeFrequency: "weekly" as const,
-      priority: 0.9,
-    },
-    {
-      url: `${baseUrl}/for-teachers`,
-      lastModified: new Date(),
-      changeFrequency: "monthly" as const,
-      priority: 0.7,
-    },
-    {
-      url: `${baseUrl}/for-kids`,
-      lastModified: new Date(),
-      changeFrequency: "monthly" as const,
-      priority: 0.7,
-    },
-    {
-      url: `${baseUrl}/pricing`,
-      lastModified: new Date(),
-      changeFrequency: "monthly" as const,
-      priority: 0.6,
-    },
-    {
-      url: `${baseUrl}/about`,
-      lastModified: new Date(),
-      changeFrequency: "monthly" as const,
-      priority: 0.5,
-    },
-    {
-      url: `${baseUrl}/faq`,
-      lastModified: new Date(),
-      changeFrequency: "monthly" as const,
-      priority: 0.5,
-    },
-    {
-      url: `${baseUrl}/privacy`,
-      lastModified: new Date(),
-      changeFrequency: "yearly" as const,
-      priority: 0.3,
-    },
-    {
-      url: `${baseUrl}/terms`,
-      lastModified: new Date(),
-      changeFrequency: "yearly" as const,
-      priority: 0.3,
-    },
+export default function sitemap(): MetadataRoute.Sitemap {
+  const pages: Array<[path: string, changeFrequency: MetadataRoute.Sitemap[number]["changeFrequency"], priority: number]> = [
+    ["/", "weekly", 1],
+    ["/ai-word-generator", "weekly", 0.95],
+    ["/word-search-maker", "weekly", 0.9],
+    ["/word-search-generator", "weekly", 0.9],
+    ["/for-teachers", "monthly", 0.8],
+    ["/for-kids", "monthly", 0.75],
+    ["/pricing", "monthly", 0.6],
+    ["/about", "monthly", 0.5],
+    ["/faq", "monthly", 0.6],
+    ["/privacy", "yearly", 0.2],
+    ["/terms", "yearly", 0.2],
   ]
 
-  return staticPages
+  return pages.map(([path, changeFrequency, priority]) => ({
+    url: new URL(path, baseUrl).toString(),
+    lastModified: new Date(),
+    changeFrequency,
+    priority,
+  }))
 }
