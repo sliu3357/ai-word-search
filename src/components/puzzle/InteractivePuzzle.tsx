@@ -298,12 +298,14 @@ export function InteractivePuzzle({
     gridScrollLeft: number
     gridScrollTop: number
   } | null>(null)
-  // 长按计时器 id：touchstart 后启动 220ms，到期未抬且手指仍停留在起点格附近 → 标记 holdLocked，轴对齐方向也允许拖
+  // 长按计时器 id：touchstart 后启动 150ms，到期未抬且手指仍停留在起点格附近 → 标记 holdLocked，轴对齐方向也允许拖
   const holdTimerRef = React.useRef<number | null>(null)
   // 长按锁定信号：true 意味着本次按下"我要选词"，之后即使是纯横/纯纵也直接锁定，不再交给滚动
   const holdLockedRef = React.useRef<boolean>(false)
   // 歧义方向标记：首次判定得到的方向如果是纯横/纯纵（轴对齐、和滚动意图冲突），需要走额外判定
   const axisAlignedRef = React.useRef<boolean>(false)
+  // 上一次 touchmove 的指针位置/时间，用于计算瞬时速度（区分"慢拖选词" vs "快滑滚动"）
+  const lastTouchMoveRef = React.useRef<{ x: number; y: number; t: number } | null>(null)
 
   // 找到的单词 -> 颜色索引 映射
   const foundWordMap = React.useMemo(() => {
@@ -510,9 +512,12 @@ export function InteractivePuzzle({
    *       axis-aligned 轴对齐（纯横 dr=0 或纯纵 dc=0）
    *           → 歧义方向，不能直接锁，需要额外证据：
    *              A. scroll 值实际变化 → 判为滚动，清空起点，不再判定。
-   *              B. 长按 220ms 未抬起且无滚动 → holdLocked = true，视为"我要选词"。
+   *              B. 长按 150ms 未抬起且无滚动 → holdLocked = true，视为"我要选词"。
    *              C. 位移很大（≥80px）且已跨过 ≥2 格，同时 scroll 值仍没变 → 锁定选词
    *                 （即你已经沿该方向拉了很长一段字母都没滚到，说明确实是在选词）。
+   *              D. 瞬时速度 > 1.5 px/ms → 快速滑动，判为滚动意图（放行给浏览器）。
+   *              E. 慢速轴对齐移动 → 主动 preventDefault 阻止浏览器偷偷滚动，
+   *                 保护长按/位移判定不被 scroll 变化打断（v3.1 核心修复）。
    *       其它角度 → 判为滚动，不拦截。
    *  2) 一次手势一旦"被判为滚动"，该次手势全程都是滚动，不会再切回选词（避免抖动）。
    *  3) 锁定 touchmove 仍然沿固定 (dr,dc) 直线计算终点，防止手指抖动跳格。
@@ -526,8 +531,9 @@ export function InteractivePuzzle({
     if (!("ontouchstart" in window)) return
 
     const MOVE_THRESHOLD_PX = 6
-    const LONG_PRESS_MS = 220
+    const LONG_PRESS_MS = 150
     const AXIS_LOCK_PX = 80
+    const FAST_SCROLL_V = 1.5 // px/ms：瞬时速度超过此值判为"快速滑动→滚动意图"
     const LOCK_ANGLE_TAN = Math.tan((22.5 * Math.PI) / 180) // ≈ 0.414
 
     // 找"可能滚动"的祖先容器：最近的 overflow-x/y = auto/scroll 祖先 + 页面本身（用于快照 scroll 值）
@@ -629,6 +635,7 @@ export function InteractivePuzzle({
       clearHoldTimer()
       holdLockedRef.current = false
       axisAlignedRef.current = false
+      lastTouchMoveRef.current = null
       touchStartPtrRef.current = { x: t.clientX, y: t.clientY, t: Date.now() }
       gestureLockedRef.current = false
       gestureDirRef.current = null
@@ -647,7 +654,7 @@ export function InteractivePuzzle({
           return { pageScrollTop: s.page, gridScrollLeft: s.roots[0] ?? 0, gridScrollTop: s.roots[0] ?? 0 }
         })()
 
-        // 2) 启动长按计时器：220ms 仍按住 + 无滚动 + 没抬指 → holdLocked，轴对齐方向也允许拖
+        // 2) 启动长按计时器：150ms 仍按住 + 无滚动 + 没抬指 → holdLocked，轴对齐方向也允许拖
         const startCell2 = cell
         holdTimerRef.current = window.setTimeout(() => {
           // 检查：滚动没发生（起点 scroll 值 == 现在）、dragStartRef 还没被清空、手势也没锁定/没被取消
@@ -738,19 +745,49 @@ export function InteractivePuzzle({
 
       // E) 仅剩：axis-aligned 轴对齐（歧义方向，和滚动同方向）
       axisAlignedRef.current = true
-      // 子条件 E1：位移还没达到轴对齐锁定最小像素（80px ≈ 2~3 格） → 暂不判定，先允许滚动（不 preventDefault），观察后续
-      if (dist < AXIS_LOCK_PX) return
 
-      // 子条件 E2：位移达到 80px 后，检查是否已经沿该方向跨过 ≥2 格，且 scroll 没变过（上面已判断）
-      const curCell = getCellFromTouch(t) || startCell
-      const step = dir.dr === 0 ? (curCell.col - startCell.col) : (curCell.row - startCell.row)
-      if (Math.abs(step) >= 2) {
-        e.preventDefault()
+      // 计算瞬时速度（最近两次 touchmove 之间的位移/时间）
+      const now = Date.now()
+      const last = lastTouchMoveRef.current
+      lastTouchMoveRef.current = { x: t.clientX, y: t.clientY, t: now }
+
+      if (last) {
+        const dt = Math.max(1, now - last.t)
+        const idx = t.clientX - last.x
+        const idy = t.clientY - last.y
+        const instV = Math.hypot(idx, idy) / dt
+        // 快速滑动 → 滚动意图，放行给浏览器（不 preventDefault）
+        if (instV > FAST_SCROLL_V) {
+          abortedToScroll = true
+          dragStartRef.current = null
+          setSelectStart(null)
+          setHoverCell(null)
+          clearHoldTimer()
+          return
+        }
+      }
+
+      // 慢速轴对齐 → 主动 preventDefault 阻止浏览器偷偷滚动，保护长按/位移判定不被 scroll 变化打断
+      e.preventDefault()
+
+      // 长按已触发（holdLocked）→ 立即锁定选词
+      if (holdLockedRef.current) {
+        const curCell = getCellFromTouch(t) || startCell
         lockGesture(dir, startCell, curCell)
         return
       }
 
-      // 跨格不够 → 仍然先交给浏览器滚动
+      // 大位移 + 跨 ≥2 格 → 兜底锁定选词
+      if (dist >= AXIS_LOCK_PX) {
+        const curCell = getCellFromTouch(t) || startCell
+        const step = dir.dr === 0 ? (curCell.col - startCell.col) : (curCell.row - startCell.row)
+        if (Math.abs(step) >= 2) {
+          lockGesture(dir, startCell, curCell)
+          return
+        }
+      }
+
+      // 慢速但还没到锁定条件 → 继续 preventDefault 保护，等待长按 150ms 到期或位移增大
       return
     }
 
@@ -763,6 +800,7 @@ export function InteractivePuzzle({
       clearHoldTimer()
       holdLockedRef.current = false
       axisAlignedRef.current = false
+      lastTouchMoveRef.current = null
       touchStartPtrRef.current = null
       gestureLockedRef.current = false
       gestureDirRef.current = null
