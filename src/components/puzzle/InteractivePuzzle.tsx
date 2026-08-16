@@ -282,6 +282,8 @@ export function InteractivePuzzle({
   const dragStartRef = React.useRef<{ row: number; col: number } | null>(null)
   // 标记刚完成拖拽（避免触发后续 click）
   const justDraggedRef = React.useRef(false)
+  // 网格容器 ref：用于注册原生触摸事件、防止移动端页面滚动/下拉
+  const gridWrapRef = React.useRef<HTMLDivElement | null>(null)
 
   // 找到的单词 -> 颜色索引 映射
   const foundWordMap = React.useMemo(() => {
@@ -474,6 +476,86 @@ export function InteractivePuzzle({
     return () => window.removeEventListener("mouseup", handleMouseUp)
   }, [hoverCell, validatePath])
 
+  /**
+   * 移动端触摸拖动：原生事件绑定（passive:false + preventDefault）
+   * —— React 合成事件 onTouchMove 默认 passive:true，e.preventDefault() 无效，
+   *    会导致手指拖动选字母时整个页面跟着滚动/橡皮筋下拉。
+   * 这里在网格容器 DOM 上直接注册原生监听器，双重防御：
+   *  1) CSS touch-action: none / user-select: none（声明性优先）
+   *  2) 原生 touchmove 中显式 preventDefault，彻底拦截滚动。
+   */
+  React.useEffect(() => {
+    const wrap = gridWrapRef.current
+    if (!wrap || typeof window === "undefined") return
+    if (!("ontouchstart" in window)) return
+
+    const getCellFromTouch = (touch: Touch): { row: number; col: number } | null => {
+      const el = document.elementFromPoint(touch.clientX, touch.clientY)
+      if (!el) return null
+      let node: Element | null = el
+      for (let i = 0; i < 4 && node; i++) {
+        const key = node.getAttribute?.("data-cell-key")
+        const r = node.getAttribute?.("data-row")
+        const c = node.getAttribute?.("data-col")
+        if (key && r != null && c != null) {
+          return { row: Number(r), col: Number(c) }
+        }
+        node = node.parentElement
+      }
+      return null
+    }
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (!e.touches[0]) return
+      e.preventDefault()
+      handleFirstInteraction()
+      const cell = getCellFromTouch(e.touches[0])
+      if (!cell) return
+      dragStartRef.current = cell
+      setSelectStart(cell)
+      setHoverCell(cell)
+      setWrongPath(null)
+    }
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (!dragStartRef.current && !selectStart) return
+      if (!e.touches[0]) return
+      // 核心：真正阻止浏览器把拖动识别成 page 滚动 / 橡皮筋下拉
+      e.preventDefault()
+      const cell = getCellFromTouch(e.touches[0])
+      if (cell) setHoverCell(cell)
+    }
+
+    const onTouchEnd = (e: TouchEvent) => {
+      e.preventDefault()
+      if (!dragStartRef.current) return
+      const start = dragStartRef.current
+      dragStartRef.current = null
+      if (!hoverCell || (start.row === hoverCell.row && start.col === hoverCell.col)) {
+        // 单格触摸：点击模式（后续由 click 处理起点/终点）
+        return
+      }
+      const path = getLinePath(start.row, start.col, hoverCell.row, hoverCell.col)
+      if (path && path.length >= 2) {
+        justDraggedRef.current = true
+        validatePath(path)
+      }
+    }
+
+    const opts: AddEventListenerOptions = { passive: false, capture: false }
+    wrap.addEventListener("touchstart", onTouchStart, opts)
+    wrap.addEventListener("touchmove", onTouchMove, opts)
+    wrap.addEventListener("touchend", onTouchEnd, opts)
+    wrap.addEventListener("touchcancel", onTouchEnd, opts)
+
+    return () => {
+      wrap.removeEventListener("touchstart", onTouchStart, opts as EventListenerOptions)
+      wrap.removeEventListener("touchmove", onTouchMove, opts as EventListenerOptions)
+      wrap.removeEventListener("touchend", onTouchEnd, opts as EventListenerOptions)
+      wrap.removeEventListener("touchcancel", onTouchEnd, opts as EventListenerOptions)
+    }
+  }, [hoverCell, selectStart, validatePath, handleFirstInteraction])
+
   const handleReset = () => {
     setFoundWords([])
     setSelectStart(null)
@@ -559,7 +641,16 @@ export function InteractivePuzzle({
         {/* 游戏网格 */}
         <div className="flex justify-center overflow-x-auto py-2">
           <div
+            ref={gridWrapRef}
             className="inline-block p-3 sm:p-4 rounded-2xl border-2 border-border bg-card shadow-sm select-none"
+            style={{
+              // 关键 CSS：声明性地告诉移动端浏览器，本区域的触摸手势不要翻译成滚动/缩放/橡皮筋下拉
+              touchAction: "none",
+              // 防止长按弹出系统菜单、阻止文字选中
+              WebkitUserSelect: "none",
+              userSelect: "none",
+              WebkitTouchCallout: "none",
+            }}
             onMouseLeave={() => {
               if (!dragStartRef.current && !selectStart) setHoverCell(null)
             }}
@@ -609,39 +700,6 @@ export function InteractivePuzzle({
                       onClick={() => handleCellClick(rowIndex, colIndex)}
                       onMouseDown={() => handleCellMouseDown(rowIndex, colIndex)}
                       onMouseEnter={() => handleCellMouseEnter(rowIndex, colIndex)}
-                      onTouchStart={(e) => {
-                        e.preventDefault()
-                        handleCellMouseDown(rowIndex, colIndex)
-                      }}
-                      onTouchMove={(e) => {
-                        e.preventDefault()
-                        const touch = e.touches[0]
-                        const el = document.elementFromPoint(touch.clientX, touch.clientY)
-                        if (el) {
-                          const cellKey = el.getAttribute("data-cell-key")
-                          if (cellKey) {
-                            const [r, c] = cellKey.split("-").map(Number)
-                            handleCellMouseEnter(r, c)
-                          }
-                        }
-                      }}
-                      onTouchEnd={(e) => {
-                        e.preventDefault()
-                        // 触屏：直接用 click 逻辑
-                        if (dragStartRef.current) {
-                          const start = dragStartRef.current
-                          dragStartRef.current = null
-                          if (!hoverCell || (start.row === hoverCell.row && start.col === hoverCell.col)) {
-                            // 单格，交给 click
-                            return
-                          }
-                          const path = getLinePath(start.row, start.col, hoverCell.row, hoverCell.col)
-                          if (path && path.length >= 2) {
-                            justDraggedRef.current = true
-                            validatePath(path)
-                          }
-                        }
-                      }}
                     >
                       {letter}
                     </div>
