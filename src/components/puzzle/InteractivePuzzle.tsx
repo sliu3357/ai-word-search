@@ -285,27 +285,19 @@ export function InteractivePuzzle({
   // 网格容器 ref：用于注册原生触摸事件、防止移动端页面滚动/下拉
   const gridWrapRef = React.useRef<HTMLDivElement | null>(null)
 
-  // === 移动端方向判定 + 动态滚动锁定 refs ===
-  // 记录 touchstart 的指针位置/时间，用于首次 touchmove 时判断用户是在"拖字母"还是"滚页面/网格"
+  // === 移动端长按锁定选词 refs ===
+  // 简化策略：长按 150ms 之前，所有触摸 100% 交给浏览器滚动（不 preventDefault）。
+  // 长按到期且手指仍按住起点格 → gestureLockedRef=true，之后所有 touchmove 都 preventDefault 锁画面并沿 8 方向选字母。
   const touchStartPtrRef = React.useRef<{ x: number; y: number; t: number } | null>(null)
-  // 判定结果：true = 已锁定为"选字母"手势，之后所有 touchmove 要 preventDefault 并更新 hoverCell
+  // 手势锁定：true 代表本次触摸已进入"拖词模式"
   const gestureLockedRef = React.useRef<boolean>(false)
-  // 锁定后本次拖拽使用的 8 方向（dr,dc），确保后续沿同一条直线取 hoverCell（更稳定）
+  // 锁定后按投影计算的 8 方向单位向量，保证拖词路径直线稳定
   const gestureDirRef = React.useRef<{ dr: number; dc: number } | null>(null)
-  // 起点处的滚动快照：用于检测"用户其实是在滚（scroll 值变了）"，纯水平/纯垂直方向不立即锁定时的判定依据
-  const scrollSnapshotRef = React.useRef<{
-    pageScrollTop: number
-    gridScrollLeft: number
-    gridScrollTop: number
-  } | null>(null)
-  // 长按计时器 id：touchstart 后启动 150ms，到期未抬且手指仍停留在起点格附近 → 标记 holdLocked，轴对齐方向也允许拖
+  // 长按计时器 id
   const holdTimerRef = React.useRef<number | null>(null)
-  // 长按锁定信号：true 意味着本次按下"我要选词"，之后即使是纯横/纯纵也直接锁定，不再交给滚动
-  const holdLockedRef = React.useRef<boolean>(false)
-  // 歧义方向标记：首次判定得到的方向如果是纯横/纯纵（轴对齐、和滚动意图冲突），需要走额外判定
-  const axisAlignedRef = React.useRef<boolean>(false)
-  // 上一次 touchmove 的指针位置/时间，用于计算瞬时速度（区分"慢拖选词" vs "快滑滚动"）
-  const lastTouchMoveRef = React.useRef<{ x: number; y: number; t: number } | null>(null)
+
+  // 视觉反馈：当 holdIndicator = {row, col} 时，这个格子显示"已锁定拖词"的黄色环/轻微放大（用户的心理锚点）
+  const [holdIndicator, setHoldIndicator] = React.useState<{ row: number; col: number } | null>(null)
 
   // 找到的单词 -> 颜色索引 映射
   const foundWordMap = React.useMemo(() => {
@@ -499,59 +491,38 @@ export function InteractivePuzzle({
   }, [hoverCell, validatePath])
 
   /**
-   * 移动端触摸拖动：方向判定 + 动态滚动锁定（原生事件，passive:false）
+   * 移动端触摸拖动：v4 极简策略 — 纯长按锁定（消除方向/速度/scroll 的组合歧义）
    *
-   * v2 遗留问题：把纯横/纯纵（0°/90°）也当成"8 方向选词"直接锁定，
-   * 但这两个方向恰恰也是"手指横向滑动浏览右侧字母 / 纵向滑动看侧栏单词"的滚动方向，
-   * 导致用户从一格起点向左右拉动看后面字母时，很容易被误锁成"选词"，页面反而不能滚。
+   * 之前 v3/v3.1 的问题：方向判定 + 瞬时速度门控 + scroll 变化守门 三个条件互相组合后，
+   * "纯水平从左向右"与"纯垂直从上向下"作为歧义轴对齐方向，要么滚动误吞拖词，要么
+   * preventDefault 又锁死滚动 — 边界 case 太多（略慢的滚动、略快的拖词、手指抖动、
+   * 滚动容器有横向 overflow-x:auto 等）永远调不到头。
    *
-   * v3 判定策略：
-   *  1) 先判断方向的"可判定类型"：
-   *       diagonal 对角线（±45°/±135° 等，ratio ∈ [0.414, 2.414]）
-   *           → 绝对不可能是滚动（滚动只能是纯横/纯纵），立刻锁定选词（安全）。
-   *       axis-aligned 轴对齐（纯横 dr=0 或纯纵 dc=0）
-   *           → 歧义方向，不能直接锁，需要额外证据：
-   *              A. scroll 值实际变化 → 判为滚动，清空起点，不再判定。
-   *              B. 长按 150ms 未抬起且无滚动 → holdLocked = true，视为"我要选词"。
-   *              C. 位移很大（≥80px）且已跨过 ≥2 格，同时 scroll 值仍没变 → 锁定选词
-   *                 （即你已经沿该方向拉了很长一段字母都没滚到，说明确实是在选词）。
-   *              D. 瞬时速度 > 1.5 px/ms → 快速滑动，判为滚动意图（放行给浏览器）。
-   *              E. 慢速轴对齐移动 → 主动 preventDefault 阻止浏览器偷偷滚动，
-   *                 保护长按/位移判定不被 scroll 变化打断（v3.1 核心修复）。
-   *       其它角度 → 判为滚动，不拦截。
-   *  2) 一次手势一旦"被判为滚动"，该次手势全程都是滚动，不会再切回选词（避免抖动）。
-   *  3) 锁定 touchmove 仍然沿固定 (dr,dc) 直线计算终点，防止手指抖动跳格。
-   *  4) touchend：只有锁定过且 ≥2 格才 validatePath；否则交给 click（点击模式）。
+   * v4 彻底简化为单一金标准：是否 150ms 长按锁定。
+   *  ┌─────────────── 长按 150ms 未到 or 起点没在格子上 ───────────────┐
+   *  │  1) 所有 touch 事件 100% 交给浏览器滚动处理                   │
+   *  │  2) 不 preventDefault、不修改状态、不清空起点                 │
+   *  │  3) 用户能左右滑看后面字母、上下滑看侧栏单词，完全自然       │
+   *  └───────────────────────────────────────────────────────────────┘
+   *  ┌─────────────── 长按 150ms 到期（仍按住起点格）──────────────────┐
+   *  │  1) gestureLockedRef = true，并且视觉上起点格出现黄色环+放大 │
+   *  │  2) 之后所有 touchmove：立即 preventDefault、画面不滚动      │
+   *  │  3) 从起点到当前指针投影到 8 方向，沿直线选字母，不抖        │
+   *  │  4) 抬指：若 ≥2 格 → validatePath 提交答案                  │
+   *  └───────────────────────────────────────────────────────────────┘
+   *  补充：如果在长按到期前用户移动了 > 24px（明显是要滚，不是要按），就立即取消长按计时器，
+   *      这一次手势 100% 交给滚动，避免"想滑却刚好被长按卡住"的体验。
    *
-   * CSS 端保持 touch-action: manipulation：允许 pan-x / pan-y，禁双击缩放。
+   * 另外点击模式（起点点按、终点点按）完全不受影响，手机上也可以走这条路径。
    */
   React.useEffect(() => {
     const wrap = gridWrapRef.current
     if (!wrap || typeof window === "undefined") return
     if (!("ontouchstart" in window)) return
 
-    const MOVE_THRESHOLD_PX = 6
     const LONG_PRESS_MS = 150
-    const AXIS_LOCK_PX = 80
-    const FAST_SCROLL_V = 1.5 // px/ms：瞬时速度超过此值判为"快速滑动→滚动意图"
+    const CANCEL_HOLD_MOVE_PX = 24   // 长按到期前，如果手移动超过这个像素就取消长按（视为滚动意图）
     const LOCK_ANGLE_TAN = Math.tan((22.5 * Math.PI) / 180) // ≈ 0.414
-
-    // 找"可能滚动"的祖先容器：最近的 overflow-x/y = auto/scroll 祖先 + 页面本身（用于快照 scroll 值）
-    const findScrollAncestors = () => {
-      const roots: Element[] = []
-      let el: Element | null = wrap
-      for (let i = 0; i < 8 && el; i++) {
-        const s = getComputedStyle(el)
-        if (
-          s.overflowX === "auto" || s.overflowX === "scroll" ||
-          s.overflowY === "auto" || s.overflowY === "scroll"
-        ) {
-          roots.push(el)
-        }
-        el = el.parentElement
-      }
-      return roots
-    }
 
     const getCellFromTouch = (touch: Touch): { row: number; col: number } | null => {
       const el = document.elementFromPoint(touch.clientX, touch.clientY)
@@ -567,42 +538,21 @@ export function InteractivePuzzle({
       return null
     }
 
-    type Kind = "diagonal" | "axis" | null
-    /** 分类：返回 {kind, dir}；dir 仅当 kind 非 null 时有值 */
-    const classify = (dx: number, dy: number): { kind: Kind; dir: { dr: number; dc: number } | null } => {
+    /** 给定位移 (dx,dy) → 8 方向单位向量 (dr,dc)，不属于 8 方向返回 null */
+    const classify8Dir = (dx: number, dy: number): { dr: number; dc: number } | null => {
       const absX = Math.abs(dx)
       const absY = Math.abs(dy)
-      if (absX === 0 && absY === 0) return { kind: null, dir: null }
+      if (absX === 0 && absY === 0) return null
       const dr = dy === 0 ? 0 : dy > 0 ? 1 : -1
       const dc = dx === 0 ? 0 : dx > 0 ? 1 : -1
-      if (absX === 0) return { kind: "axis", dir: { dr, dc: 0 } }       // 纯垂直
-      if (absY === 0) return { kind: "axis", dir: { dr: 0, dc } }       // 纯水平
+      if (absX === 0) return { dr, dc: 0 }              // 纯垂直
+      if (absY === 0) return { dr: 0, dc }              // 纯水平
       const ratio = absX < absY ? absX / absY : absY / absX
-      // 对角线：ratio ≈ 1（ ±22.5° ）
-      if (ratio >= LOCK_ANGLE_TAN && ratio <= 1 / LOCK_ANGLE_TAN) {
-        return { kind: "diagonal", dir: { dr, dc } }
-      }
-      // 其它 ratio（非常"偏横"或"偏纵"，但又并非完全轴对齐）→ 非 8 方向，不允许拖词
-      return { kind: null, dir: null }
+      // 对角线：ratio ∈ [tan22.5°, tan67.5°]
+      if (ratio >= LOCK_ANGLE_TAN && ratio <= 1 / LOCK_ANGLE_TAN) return { dr, dc }
+      return null
     }
 
-    /** 取 scroll 快照：documentElement.scrollTop + 所有可滚祖先的 scrollLeft/Top 变化记录在一个标量里，方便后续快速比较是否有任何变化 */
-    let scrollRoots: Element[] = []
-    const takeScrollSnapshot = (): { page: number; roots: number[] } => {
-      const roots = scrollRoots.map(r => r.scrollLeft * 31 + r.scrollTop * 97)
-      const page = document.documentElement.scrollTop + (document.scrollingElement?.scrollTop ?? 0)
-      return { page, roots }
-    }
-    const scrollChanged = (before: { page: number; roots: number[] }) => {
-      const now = takeScrollSnapshot()
-      if (Math.abs(now.page - before.page) > 0.5) return true
-      for (let i = 0; i < now.roots.length; i++) {
-        if (Math.abs(now.roots[i] - before.roots[i]) > 0.5) return true
-      }
-      return false
-    }
-
-    // 清理长按计时器
     const clearHoldTimer = () => {
       if (holdTimerRef.current != null) {
         window.clearTimeout(holdTimerRef.current)
@@ -610,64 +560,41 @@ export function InteractivePuzzle({
       }
     }
 
-    // 锁定工具函数：统一设置锁定态并立刻计算一次 hoverCell
-    const lockGesture = (dir: { dr: number; dc: number }, startCell: { row: number; col: number }, curCell: { row: number; col: number }) => {
-      gestureLockedRef.current = true
-      gestureDirRef.current = dir
-      const { dr, dc } = dir
-      const stepRow = curCell.row - startCell.row
-      const stepCol = curCell.col - startCell.col
-      const signedStep =
-        dr === 0 ? stepCol :
-        dc === 0 ? stepRow :
-        Math.abs(stepRow) >= Math.abs(stepCol) ? stepRow : stepCol
-      const n = Math.max(1, Math.abs(signedStep)) * Math.sign(signedStep || 1)
-      setHoverCell({ row: startCell.row + dr * n, col: startCell.col + dc * n })
-    }
-
-    // 本轮是否"已判为滚动"：一旦 true 就一直 true 到 touchend
-    let abortedToScroll = false
-
     const onTouchStart = (e: TouchEvent) => {
       if (!e.touches[0]) return
       const t = e.touches[0]
-      abortedToScroll = false
-      clearHoldTimer()
-      holdLockedRef.current = false
-      axisAlignedRef.current = false
-      lastTouchMoveRef.current = null
+      handleFirstInteraction()
+      const cell = getCellFromTouch(t)
+
       touchStartPtrRef.current = { x: t.clientX, y: t.clientY, t: Date.now() }
       gestureLockedRef.current = false
       gestureDirRef.current = null
-      handleFirstInteraction()
-      const cell = getCellFromTouch(t)
-      if (cell) {
-        dragStartRef.current = cell
-        setSelectStart(cell)
-        setHoverCell(cell)
-        setWrongPath(null)
+      clearHoldTimer()
+      // 先清掉视觉提示（旧的 hold）
+      setHoldIndicator(null)
 
-        // 1) 捕获 scrollRoots + 快照
-        if (!scrollRoots.length) scrollRoots = findScrollAncestors()
-        scrollSnapshotRef.current = (() => {
-          const s = takeScrollSnapshot()
-          return { pageScrollTop: s.page, gridScrollLeft: s.roots[0] ?? 0, gridScrollTop: s.roots[0] ?? 0 }
-        })()
-
-        // 2) 启动长按计时器：150ms 仍按住 + 无滚动 + 没抬指 → holdLocked，轴对齐方向也允许拖
-        const startCell2 = cell
-        holdTimerRef.current = window.setTimeout(() => {
-          // 检查：滚动没发生（起点 scroll 值 == 现在）、dragStartRef 还没被清空、手势也没锁定/没被取消
-          const snap = scrollSnapshotRef.current
-          const noScroll = snap && !scrollChanged({ page: snap.pageScrollTop, roots: [snap.gridScrollLeft, snap.gridScrollTop] })
-          if (noScroll && dragStartRef.current && !gestureLockedRef.current && !abortedToScroll) {
-            holdLockedRef.current = true
-          }
-          holdTimerRef.current = null
-        }, LONG_PRESS_MS)
-      } else {
+      if (!cell) {
+        // 起点没在格子上 → 全程交给浏览器滚动
         dragStartRef.current = null
+        return
       }
+
+      dragStartRef.current = cell
+      setSelectStart(cell)
+      setHoverCell(cell)
+      setWrongPath(null)
+
+      // 启动长按倒计时：150ms 后若还按住就进入"拖词模式"
+      const startCell = cell
+      holdTimerRef.current = window.setTimeout(() => {
+        // 到期：进入锁定态（此时不一定 touchmove 了，手可能还停在原处）
+        gestureLockedRef.current = true
+        gestureDirRef.current = null       // 方向等第一个 touchmove 再定
+        dragStartRef.current = startCell   // 保险再挂一次
+        // 视觉锁定提示
+        setHoldIndicator(startCell)
+        holdTimerRef.current = null
+      }, LONG_PRESS_MS)
     }
 
     const onTouchMove = (e: TouchEvent) => {
@@ -675,13 +602,23 @@ export function InteractivePuzzle({
       const t = e.touches[0]
       const startPtr = touchStartPtrRef.current
       const startCell = dragStartRef.current
-      const snap = scrollSnapshotRef.current
 
-      // 分支 1：已经锁定为选词 → 持续 preventDefault 并沿直线更新
-      if (gestureLockedRef.current && startCell && gestureDirRef.current) {
+      // ===== 分支 A：已锁定拖词模式（gestureLockedRef = true） =====
+      if (gestureLockedRef.current && startCell) {
         e.preventDefault()
-        const curCell = getCellFromTouch(t) || startCell
+        // 如果方向还没定，用"起点到当前指针的 8 方向投影"取一个方向，然后固定
+        if (!gestureDirRef.current) {
+          const dx = t.clientX - (startPtr?.x ?? t.clientX)
+          const dy = t.clientY - (startPtr?.y ?? t.clientY)
+          const dir = classify8Dir(dx, dy)
+          if (!dir) {
+            // 手还没动出明确方向 → 只 preventDefault 不更新 hover，继续等待
+            return
+          }
+          gestureDirRef.current = dir
+        }
         const { dr, dc } = gestureDirRef.current
+        const curCell = getCellFromTouch(t) || startCell
         const stepRow = curCell.row - startCell.row
         const stepCol = curCell.col - startCell.col
         const signedStep =
@@ -693,122 +630,35 @@ export function InteractivePuzzle({
         return
       }
 
-      // 已经被判为滚动 → 全程不做任何事，让浏览器滚
-      if (abortedToScroll) return
-
-      // 没有起点（没点在格子上 / 之前被清空）→ 让浏览器滚
-      if (!startPtr || !startCell) return
-
-      const dx = t.clientX - startPtr.x
-      const dy = t.clientY - startPtr.y
-      const dist = Math.hypot(dx, dy)
-      if (dist < MOVE_THRESHOLD_PX) return // 没动，不判定
-
-      // 首次方向分类
-      const { kind, dir } = classify(dx, dy)
-
-      // A) scroll 实际发生过？（用户在拉页面/网格） → 判为滚动，清理起点，之后全程滚动
-      if (snap && scrollChanged({ page: snap.pageScrollTop, roots: [snap.gridScrollLeft, snap.gridScrollTop] })) {
-        abortedToScroll = true
-        dragStartRef.current = null
-        setSelectStart(null)
-        setHoverCell(null)
-        clearHoldTimer()
-        return
-      }
-
-      // B) 长按锁定已触发（holdLocked=true）→ 不论方向，只要能匹配一个 8 方向就按该方向锁定选词
-      if (holdLockedRef.current && dir) {
-        e.preventDefault()
-        const curCell = getCellFromTouch(t) || startCell
-        lockGesture(dir, startCell, curCell)
-        return
-      }
-
-      // C) 角度根本不在 8 方向里（非 diagonal / 非轴对齐） → 滚动
-      if (!kind || !dir) {
-        abortedToScroll = true
-        dragStartRef.current = null
-        setSelectStart(null)
-        setHoverCell(null)
-        clearHoldTimer()
-        return
-      }
-
-      // D) diagonal 对角线 → 绝对安全，立即锁定选词
-      if (kind === "diagonal") {
-        e.preventDefault()
-        const curCell = getCellFromTouch(t) || startCell
-        lockGesture(dir, startCell, curCell)
-        return
-      }
-
-      // E) 仅剩：axis-aligned 轴对齐（歧义方向，和滚动同方向）
-      axisAlignedRef.current = true
-
-      // 计算瞬时速度（最近两次 touchmove 之间的位移/时间）
-      const now = Date.now()
-      const last = lastTouchMoveRef.current
-      lastTouchMoveRef.current = { x: t.clientX, y: t.clientY, t: now }
-
-      if (last) {
-        const dt = Math.max(1, now - last.t)
-        const idx = t.clientX - last.x
-        const idy = t.clientY - last.y
-        const instV = Math.hypot(idx, idy) / dt
-        // 快速滑动 → 滚动意图，放行给浏览器（不 preventDefault）
-        if (instV > FAST_SCROLL_V) {
-          abortedToScroll = true
-          dragStartRef.current = null
-          setSelectStart(null)
-          setHoverCell(null)
+      // ===== 分支 B：还没进入拖词模式（长按还没到期，或已经是纯滚动） =====
+      //   → 全程不 preventDefault，完全交给浏览器滚动
+      //   但如果长按计时器还在、并且手移动超过 CANCEL_HOLD_MOVE_PX，就主动取消长按，
+      //     避免"本来想滑，刚滑一点点就刚好被长按锁死"。
+      if (startPtr && holdTimerRef.current != null) {
+        const dx = t.clientX - startPtr.x
+        const dy = t.clientY - startPtr.y
+        if (Math.hypot(dx, dy) > CANCEL_HOLD_MOVE_PX) {
           clearHoldTimer()
-          return
         }
       }
-
-      // 慢速轴对齐 → 主动 preventDefault 阻止浏览器偷偷滚动，保护长按/位移判定不被 scroll 变化打断
-      e.preventDefault()
-
-      // 长按已触发（holdLocked）→ 立即锁定选词
-      if (holdLockedRef.current) {
-        const curCell = getCellFromTouch(t) || startCell
-        lockGesture(dir, startCell, curCell)
-        return
-      }
-
-      // 大位移 + 跨 ≥2 格 → 兜底锁定选词
-      if (dist >= AXIS_LOCK_PX) {
-        const curCell = getCellFromTouch(t) || startCell
-        const step = dir.dr === 0 ? (curCell.col - startCell.col) : (curCell.row - startCell.row)
-        if (Math.abs(step) >= 2) {
-          lockGesture(dir, startCell, curCell)
-          return
-        }
-      }
-
-      // 慢速但还没到锁定条件 → 继续 preventDefault 保护，等待长按 150ms 到期或位移增大
-      return
     }
 
     const onTouchEnd = (e: TouchEvent) => {
-      const start = dragStartRef.current
       const locked = gestureLockedRef.current
+      const start = dragStartRef.current
 
       // 清理所有会话状态
-      abortedToScroll = false
       clearHoldTimer()
-      holdLockedRef.current = false
-      axisAlignedRef.current = false
-      lastTouchMoveRef.current = null
-      touchStartPtrRef.current = null
       gestureLockedRef.current = false
       gestureDirRef.current = null
-      scrollSnapshotRef.current = null
+      touchStartPtrRef.current = null
       dragStartRef.current = null
+      setHoldIndicator(null)
 
+      // 没锁定 → 交给 click（点击模式选字母：先点起点、再点终点）
       if (!locked || !start) return
 
+      // 锁定过：抬指时若路径 ≥2 格，提交答案
       if (!hoverCell || (start.row === hoverCell.row && start.col === hoverCell.col)) return
       const path = getLinePath(start.row, start.col, hoverCell.row, hoverCell.col)
       if (path && path.length >= 2) {
@@ -826,7 +676,6 @@ export function InteractivePuzzle({
 
     return () => {
       clearHoldTimer()
-      scrollRoots = []
       wrap.removeEventListener("touchstart", onTouchStart, opts as EventListenerOptions)
       wrap.removeEventListener("touchmove", onTouchMove, opts as EventListenerOptions)
       wrap.removeEventListener("touchend", onTouchEnd, opts as EventListenerOptions)
@@ -953,6 +802,7 @@ export function InteractivePuzzle({
                   const isFound = colorIdx !== undefined
                   const color = isFound ? WORD_COLORS[colorIdx!] : null
                   const isStart = selectStart?.row === rowIndex && selectStart?.col === colIndex
+                  const isHold = holdIndicator?.row === rowIndex && holdIndicator?.col === colIndex
 
                   return (
                     <div
@@ -962,10 +812,11 @@ export function InteractivePuzzle({
                       data-row={rowIndex}
                       data-col={colIndex}
                       className={cn(
-                        "flex items-center justify-center font-mono font-bold border border-border/40 cursor-pointer transition-colors duration-150",
+                        "flex items-center justify-center font-mono font-bold border border-border/40 cursor-pointer transition-all duration-150 ease-out",
                         cellSizeClass,
-                        !isFound && !isSelected && !isWrong && "hover:bg-[var(--primary-light)]",
-                        isSelected && !isFound && "bg-[var(--primary)] text-white scale-105 z-10",
+                        !isFound && !isSelected && !isWrong && !isHold && "hover:bg-[var(--primary-light)]",
+                        isHold && !isFound && "bg-amber-200 text-amber-900 ring-2 ring-amber-400 scale-110 shadow-lg z-20",
+                        isSelected && !isFound && !isHold && "bg-[var(--primary)] text-white scale-105 z-10",
                         isWrong && "bg-red-200 text-red-700",
                         isFound && "scale-100"
                       )}
