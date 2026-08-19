@@ -491,29 +491,28 @@ export function InteractivePuzzle({
   }, [hoverCell, validatePath])
 
   /**
-   * 移动端触摸拖动：v4 极简策略 — 纯长按锁定（消除方向/速度/scroll 的组合歧义）
+   * 移动端触摸拖动：v5 — touch-action:none + 手动滚动 + 长按锁定
    *
-   * 之前 v3/v3.1 的问题：方向判定 + 瞬时速度门控 + scroll 变化守门 三个条件互相组合后，
-   * "纯水平从左向右"与"纯垂直从上向下"作为歧义轴对齐方向，要么滚动误吞拖词，要么
-   * preventDefault 又锁死滚动 — 边界 case 太多（略慢的滚动、略快的拖词、手指抖动、
-   * 滚动容器有横向 overflow-x:auto 等）永远调不到头。
+   * v4 的问题：touch-action: manipulation 允许浏览器自动 pan-x/pan-y → 用户按住格子时
+   * 手指只要微微一抖，浏览器就抢先开始滚动 → 等 150ms 长按 timer 到了再 preventDefault
+   * 已晚，手势被浏览器抢走 → "横竖都不行"。
    *
-   * v4 彻底简化为单一金标准：是否 150ms 长按锁定。
-   *  ┌─────────────── 长按 150ms 未到 or 起点没在格子上 ───────────────┐
-   *  │  1) 所有 touch 事件 100% 交给浏览器滚动处理                   │
-   *  │  2) 不 preventDefault、不修改状态、不清空起点                 │
-   *  │  3) 用户能左右滑看后面字母、上下滑看侧栏单词，完全自然       │
+   * v5 核心：touch-action: none → 浏览器完全不自动滚动，所有滚动由 JS 手动控制。
+   *  ┌────────── 长按 150ms 未到 / 手移动 > 24px（取消长按）──────────┐
+   *  │  preventDefault（阻止浏览器一切默认行为）                     │
+   *  │  手动滚动：                                                    │
+   *  │    - 纵向：window.scrollBy(0, -dy) 滚动页面（看侧栏单词）     │
+   *  │    - 横向：找到 overflow-x:auto 祖先 → scrollLeft -= dx      │
+   *  │    （看超出屏幕的后面字母）                                    │
+   *  │  → 用户体验和原生滚动几乎一样（逐帧更新 scrollLeft/Top）      │
    *  └───────────────────────────────────────────────────────────────┘
-   *  ┌─────────────── 长按 150ms 到期（仍按住起点格）──────────────────┐
-   *  │  1) gestureLockedRef = true，并且视觉上起点格出现黄色环+放大 │
-   *  │  2) 之后所有 touchmove：立即 preventDefault、画面不滚动      │
-   *  │  3) 从起点到当前指针投影到 8 方向，沿直线选字母，不抖        │
-   *  │  4) 抬指：若 ≥2 格 → validatePath 提交答案                  │
+   *  ┌────────── 长按 150ms 到期（手指仍按住起点格，没移动超过 24px）─┐
+   *  │  gestureLockedRef = true + 起点格黄色放大提示                 │
+   *  │  之后所有 touchmove：preventDefault + 沿 8 方向拖词选字母   │
+   *  │  抬指：路径 ≥2 格 → validatePath                            │
    *  └───────────────────────────────────────────────────────────────┘
-   *  补充：如果在长按到期前用户移动了 > 24px（明显是要滚，不是要按），就立即取消长按计时器，
-   *      这一次手势 100% 交给滚动，避免"想滑却刚好被长按卡住"的体验。
    *
-   * 另外点击模式（起点点按、终点点按）完全不受影响，手机上也可以走这条路径。
+   * 因为 touch-action:none，浏览器永远不会抢手势 → 长按 150ms 判定 100% 可靠。
    */
   React.useEffect(() => {
     const wrap = gridWrapRef.current
@@ -521,8 +520,24 @@ export function InteractivePuzzle({
     if (!("ontouchstart" in window)) return
 
     const LONG_PRESS_MS = 150
-    const CANCEL_HOLD_MOVE_PX = 24   // 长按到期前，如果手移动超过这个像素就取消长按（视为滚动意图）
-    const LOCK_ANGLE_TAN = Math.tan((22.5 * Math.PI) / 180) // ≈ 0.414
+    const CANCEL_HOLD_MOVE_PX = 24
+    const LOCK_ANGLE_TAN = Math.tan((22.5 * Math.PI) / 180)
+
+    // 记录上一次 touchmove 的位置，用于手动滚动计算增量
+    let lastScrollX = 0
+    let lastScrollY = 0
+    // 缓存横向可滚祖先（overflow-x: auto/scroll）
+    let hScrollAncestor: Element | null = null
+
+    const findHScrollAncestor = (): Element | null => {
+      let el: Element | null = wrap
+      for (let i = 0; i < 6 && el; i++) {
+        const s = getComputedStyle(el)
+        if (s.overflowX === "auto" || s.overflowX === "scroll") return el
+        el = el.parentElement
+      }
+      return null
+    }
 
     const getCellFromTouch = (touch: Touch): { row: number; col: number } | null => {
       const el = document.elementFromPoint(touch.clientX, touch.clientY)
@@ -538,17 +553,15 @@ export function InteractivePuzzle({
       return null
     }
 
-    /** 给定位移 (dx,dy) → 8 方向单位向量 (dr,dc)，不属于 8 方向返回 null */
     const classify8Dir = (dx: number, dy: number): { dr: number; dc: number } | null => {
       const absX = Math.abs(dx)
       const absY = Math.abs(dy)
       if (absX === 0 && absY === 0) return null
       const dr = dy === 0 ? 0 : dy > 0 ? 1 : -1
       const dc = dx === 0 ? 0 : dx > 0 ? 1 : -1
-      if (absX === 0) return { dr, dc: 0 }              // 纯垂直
-      if (absY === 0) return { dr: 0, dc }              // 纯水平
+      if (absX === 0) return { dr, dc: 0 }
+      if (absY === 0) return { dr: 0, dc }
       const ratio = absX < absY ? absX / absY : absY / absX
-      // 对角线：ratio ∈ [tan22.5°, tan67.5°]
       if (ratio >= LOCK_ANGLE_TAN && ratio <= 1 / LOCK_ANGLE_TAN) return { dr, dc }
       return null
     }
@@ -557,6 +570,19 @@ export function InteractivePuzzle({
       if (holdTimerRef.current != null) {
         window.clearTimeout(holdTimerRef.current)
         holdTimerRef.current = null
+      }
+    }
+
+    /** 手动滚动：纵向滚页面 + 横向滚网格容器 */
+    const doManualScroll = (deltaX: number, deltaY: number) => {
+      // 横向：滚动 overflow-x:auto 的祖先（看后面字母）
+      if (!hScrollAncestor) hScrollAncestor = findHScrollAncestor()
+      if (hScrollAncestor && deltaX !== 0) {
+        hScrollAncestor.scrollLeft -= deltaX
+      }
+      // 纵向：滚动整个页面（看侧栏单词列表）
+      if (deltaY !== 0) {
+        window.scrollBy(0, -deltaY)
       }
     }
 
@@ -570,11 +596,13 @@ export function InteractivePuzzle({
       gestureLockedRef.current = false
       gestureDirRef.current = null
       clearHoldTimer()
-      // 先清掉视觉提示（旧的 hold）
       setHoldIndicator(null)
+      lastScrollX = t.clientX
+      lastScrollY = t.clientY
+      // 每次新触摸重新查找横向滚动祖先（DOM 可能变过）
+      hScrollAncestor = findHScrollAncestor()
 
       if (!cell) {
-        // 起点没在格子上 → 全程交给浏览器滚动
         dragStartRef.current = null
         return
       }
@@ -584,14 +612,12 @@ export function InteractivePuzzle({
       setHoverCell(cell)
       setWrongPath(null)
 
-      // 启动长按倒计时：150ms 后若还按住就进入"拖词模式"
+      // 启动长按倒计时
       const startCell = cell
       holdTimerRef.current = window.setTimeout(() => {
-        // 到期：进入锁定态（此时不一定 touchmove 了，手可能还停在原处）
         gestureLockedRef.current = true
-        gestureDirRef.current = null       // 方向等第一个 touchmove 再定
-        dragStartRef.current = startCell   // 保险再挂一次
-        // 视觉锁定提示
+        gestureDirRef.current = null
+        dragStartRef.current = startCell
         setHoldIndicator(startCell)
         holdTimerRef.current = null
       }, LONG_PRESS_MS)
@@ -599,22 +625,18 @@ export function InteractivePuzzle({
 
     const onTouchMove = (e: TouchEvent) => {
       if (!e.touches[0]) return
+      e.preventDefault() // touch-action:none 下也要显式阻止，确保万无一失
       const t = e.touches[0]
       const startPtr = touchStartPtrRef.current
       const startCell = dragStartRef.current
 
-      // ===== 分支 A：已锁定拖词模式（gestureLockedRef = true） =====
+      // ===== 分支 A：已锁定拖词模式 =====
       if (gestureLockedRef.current && startCell) {
-        e.preventDefault()
-        // 如果方向还没定，用"起点到当前指针的 8 方向投影"取一个方向，然后固定
         if (!gestureDirRef.current) {
           const dx = t.clientX - (startPtr?.x ?? t.clientX)
           const dy = t.clientY - (startPtr?.y ?? t.clientY)
           const dir = classify8Dir(dx, dy)
-          if (!dir) {
-            // 手还没动出明确方向 → 只 preventDefault 不更新 hover，继续等待
-            return
-          }
+          if (!dir) return
           gestureDirRef.current = dir
         }
         const { dr, dc } = gestureDirRef.current
@@ -630,24 +652,29 @@ export function InteractivePuzzle({
         return
       }
 
-      // ===== 分支 B：还没进入拖词模式（长按还没到期，或已经是纯滚动） =====
-      //   → 全程不 preventDefault，完全交给浏览器滚动
-      //   但如果长按计时器还在、并且手移动超过 CANCEL_HOLD_MOVE_PX，就主动取消长按，
-      //     避免"本来想滑，刚滑一点点就刚好被长按锁死"。
+      // ===== 分支 B：还没锁定（长按没到期 or 已取消） → 手动滚动 =====
+      const dx = t.clientX - lastScrollX
+      const dy = t.clientY - lastScrollY
+      lastScrollX = t.clientX
+      lastScrollY = t.clientY
+
+      // 如果长按计时器还在跑 + 手移动超过阈值 → 取消长按（说明用户要滚）
       if (startPtr && holdTimerRef.current != null) {
-        const dx = t.clientX - startPtr.x
-        const dy = t.clientY - startPtr.y
-        if (Math.hypot(dx, dy) > CANCEL_HOLD_MOVE_PX) {
+        const totalDx = t.clientX - startPtr.x
+        const totalDy = t.clientY - startPtr.y
+        if (Math.hypot(totalDx, totalDy) > CANCEL_HOLD_MOVE_PX) {
           clearHoldTimer()
         }
       }
+
+      // 手动滚动页面 + 网格容器
+      doManualScroll(dx, dy)
     }
 
     const onTouchEnd = (e: TouchEvent) => {
       const locked = gestureLockedRef.current
       const start = dragStartRef.current
 
-      // 清理所有会话状态
       clearHoldTimer()
       gestureLockedRef.current = false
       gestureDirRef.current = null
@@ -655,10 +682,8 @@ export function InteractivePuzzle({
       dragStartRef.current = null
       setHoldIndicator(null)
 
-      // 没锁定 → 交给 click（点击模式选字母：先点起点、再点终点）
       if (!locked || !start) return
 
-      // 锁定过：抬指时若路径 ≥2 格，提交答案
       if (!hoverCell || (start.row === hoverCell.row && start.col === hoverCell.col)) return
       const path = getLinePath(start.row, start.col, hoverCell.row, hoverCell.col)
       if (path && path.length >= 2) {
@@ -771,11 +796,12 @@ export function InteractivePuzzle({
             ref={gridWrapRef}
             className="inline-block p-3 sm:p-4 rounded-2xl border-2 border-border bg-card shadow-sm select-none"
             style={{
-              // 策略：manipulation = 允许 pan-x（横向滑动超出屏幕的网格看后面字母）/ pan-y（纵向滚动页面看侧栏的单词），
-              // 同时禁用双击缩放（去掉移动端 300ms 点击延迟）。
-              // 何时真正拦截滚动：由上方原生 touch 监听的"方向判定 + 动态锁定"精确控制，
-              // 只有用户沿 8 个单词方向从某格开始拖拽选字母时，才临时 preventDefault 锁滚动。
-              touchAction: "manipulation",
+              // v5 策略：touch-action: none → 浏览器完全不自动滚动
+              // 滚动全部由原生 touch handler 手动控制：
+              //   - 长按 150ms 前/手移动超过阈值 → 手动滚动页面(纵向) + 网格容器(横向)
+              //   - 长按 150ms 后 → preventDefault + 拖词选字母
+              // 这样浏览器永远不会"抢手势"，长按判定稳定可靠
+              touchAction: "none",
               // 防止长按弹出系统菜单、阻止文字选中
               WebkitUserSelect: "none",
               userSelect: "none",
