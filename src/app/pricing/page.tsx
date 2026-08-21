@@ -11,12 +11,18 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import { Breadcrumbs, JsonLd } from "@/components/seo"
 import { cn } from "@/lib/utils"
+
+const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://wordsearchai.top"
 
 export const metadata: Metadata = {
   title: "Pricing - Word Puzzle Generator",
   description:
     "Simple, transparent pricing for Word Puzzle Generator. Free tier with monthly credits, Basic and Pro plans for unlimited puzzles and premium features.",
+  alternates: {
+    canonical: `${baseUrl}/pricing`,
+  },
 }
 
 interface Plan {
@@ -89,8 +95,40 @@ const PLANS: Plan[] = [
 ]
 
 export default function PricingPage() {
+  // Product 结构化数据（每个付费方案作为 Offer）
+  const productSchema = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: "Word Puzzle Generator",
+    description:
+      "Custom word search puzzle generator with printable PDF, online play, and preset templates for teachers and kids.",
+    brand: { "@type": "Brand", name: "Wordly" },
+    url: `${baseUrl}/pricing`,
+    offers: PLANS.filter((p) => p.price !== "$0").map((plan) => ({
+      "@type": "Offer",
+      name: `${plan.name} Plan`,
+      price: plan.price.replace("$", ""),
+      priceCurrency: "USD",
+      priceSpecification: {
+        "@type": "UnitPriceSpecification",
+        price: plan.price.replace("$", ""),
+        priceCurrency: "USD",
+        referenceQuantity: { "@type": "QuantitativeValue", value: 1, unitCode: "MON" },
+      },
+      url: `${baseUrl}/pricing`,
+      availability: "https://schema.org/InStock",
+    })),
+  }
+
   return (
     <PageLayout>
+      <JsonLd data={productSchema} id="ld-product-pricing" />
+      <Breadcrumbs
+        items={[
+          { name: "Home", url: "/" },
+          { name: "Pricing", url: "/pricing" },
+        ]}
+      />
       <section className="border-b border-border bg-muted/30">
         <div className="container-app py-14 text-center md:py-20">
           <span className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-background px-4 py-1.5 text-sm font-medium text-primary shadow-sm">

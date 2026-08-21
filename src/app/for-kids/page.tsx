@@ -23,6 +23,9 @@ export const metadata: Metadata = {
   title: "Word Search for Kids - Fun Vocabulary Learning Games",
   description:
     "Fun word search puzzles for kids! Age-appropriate vocabulary learning games for ages 5-14. Colorful, printable word searches that make learning feel like play.",
+  alternates: {
+    canonical: `${process.env.NEXT_PUBLIC_APP_URL || "https://wordsearchai.top"}/for-kids`,
+  },
 }
 
 const AGE_GROUPS = [

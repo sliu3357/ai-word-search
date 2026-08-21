@@ -5,26 +5,34 @@ const FOOTER_SECTIONS = [
     title: "Product",
     links: [
       { href: "/word-search-maker", label: "Word Search Maker" },
-      { href: "/word-search-generator", label: "Word Search Generator" },
-      { href: "/word-search-generator#grade-level", label: "Grade Puzzles" },
-      { href: "/word-search-generator#theme-animals", label: "Theme Puzzles" },
+      { href: "/word-search-generator", label: "Word Search Templates" },
+      { href: "/ai-word-generator", label: "AI Word Generator" },
       { href: "/pricing", label: "Pricing" },
+    ],
+  },
+  {
+    title: "By Grade",
+    links: [
+      { href: "/grade/pre-k", label: "Pre-K Word Search" },
+      { href: "/grade/kindergarten", label: "Kindergarten Word Search" },
+      { href: "/grade/first-grade", label: "1st Grade Word Search" },
+      { href: "/grade/second-grade", label: "2nd Grade Word Search" },
+    ],
+  },
+  {
+    title: "By Theme",
+    links: [
+      { href: "/theme/animals", label: "Animal Word Search" },
+      { href: "/theme/food", label: "Food Word Search" },
+      { href: "/theme/science", label: "Science Word Search" },
+      { href: "/theme/geography", label: "Geography Word Search" },
     ],
   },
   {
     title: "Resources",
     links: [
-      { href: "/word-search-generator#grade-level", label: "By Grade Level" },
-      { href: "/word-search-generator#theme-animals", label: "By Theme" },
-      { href: "/word-search-generator", label: "Printable Puzzles" },
-      { href: "/word-search-maker", label: "Templates" },
       { href: "/for-kids", label: "For Kids" },
       { href: "/for-teachers", label: "For Teachers" },
-    ],
-  },
-  {
-    title: "Company",
-    links: [
       { href: "/about", label: "About" },
       { href: "/faq", label: "FAQ" },
     ],
@@ -44,7 +52,7 @@ export function Footer() {
   return (
     <footer className="mt-auto bg-[var(--mint)] no-print">
       <div className="container-app py-12">
-        <div className="grid grid-cols-1 gap-8 md:grid-cols-5">
+        <div className="grid grid-cols-2 gap-8 md:grid-cols-6">
           <div className="space-y-3 md:col-span-1">
             <Link
               href="/"

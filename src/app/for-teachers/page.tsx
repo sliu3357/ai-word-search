@@ -23,6 +23,9 @@ export const metadata: Metadata = {
   title: "Word Search Maker for Teachers - Free Classroom Resources",
   description:
     "Free word search maker designed for teachers. Create custom vocabulary, spelling, and themed word searches for your classroom in seconds. Printable and ready for class.",
+  alternates: {
+    canonical: `${process.env.NEXT_PUBLIC_APP_URL || "https://wordsearchai.top"}/for-teachers`,
+  },
 }
 
 const USE_CASES = [

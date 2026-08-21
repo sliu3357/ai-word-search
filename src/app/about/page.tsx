@@ -23,6 +23,9 @@ export const metadata: Metadata = {
   title: "About Us - Word Puzzle Generator",
   description:
     "Learn about Word Puzzle Generator — our mission, who we build for, and the small team behind the free word search maker used by teachers and parents worldwide.",
+  alternates: {
+    canonical: `${process.env.NEXT_PUBLIC_APP_URL || "https://wordsearchai.top"}/about`,
+  },
 }
 
 const VALUES = [

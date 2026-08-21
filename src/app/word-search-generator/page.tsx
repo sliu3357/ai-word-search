@@ -9,6 +9,10 @@ import {
   THEME_TEMPLATES,
 } from "@/components/templates/template-data"
 import { TemplateCard } from "@/components/templates/TemplateCard"
+import { Breadcrumbs } from "@/components/seo"
+import { GRADE_CATEGORIES } from "@/lib/template-categories"
+
+const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://wordsearchai.top"
 
 export const metadata: Metadata = {
   title: "Word Search Templates - 70+ Free Preset Puzzles | Wordly",
@@ -29,6 +33,9 @@ export const metadata: Metadata = {
     "emotions word search",
     "clothes word search",
   ],
+  alternates: {
+    canonical: `${baseUrl}/word-search-generator`,
+  },
 }
 
 /* Theme category metadata */
@@ -126,6 +133,13 @@ function ThemeCategorySections() {
                     {desc.subtitle}
                   </p>
                 </div>
+                <Link
+                  href={`/theme/${cat.slug}`}
+                  className="inline-flex items-center gap-1.5 text-[15px] font-bold text-secondary hover:underline underline-offset-4 shrink-0"
+                >
+                  View all {cat.name.toLowerCase()} puzzles
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
               </div>
 
               <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -151,6 +165,12 @@ function ThemeCategorySections() {
 export default function WordSearchTemplatesPage() {
   return (
     <PageLayout containerClassName="!max-w-none !px-0">
+      <Breadcrumbs
+        items={[
+          { name: "Home", url: "/" },
+          { name: "Templates", url: "/word-search-generator" },
+        ]}
+      />
       {/* 1) HERO / QUICK START + FEATURED */}
       <section className="relative overflow-hidden bg-[#F2F8F5] py-16 md:py-20">
         <div className="container-app">
@@ -212,6 +232,20 @@ export default function WordSearchTemplatesPage() {
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {GRADE_TEMPLATES.map((t) => (
               <TemplateCard key={t.id} template={t} />
+            ))}
+          </div>
+
+          {/* 年级内链 —— 跳转到 /grade/[slug] 语义化页面 */}
+          <div className="mt-8 flex flex-wrap gap-2">
+            {GRADE_CATEGORIES.map((g) => (
+              <Link
+                key={g.slug}
+                href={`/grade/${g.slug}`}
+                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-4 py-2 text-sm font-medium text-foreground/80 transition-colors hover:bg-primary hover:text-primary-foreground"
+              >
+                {g.shortName} word searches
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
             ))}
           </div>
         </div>

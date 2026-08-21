@@ -1,5 +1,7 @@
 import type { Metadata } from "next"
 
+const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://wordsearchai.top"
+
 export const metadata: Metadata = {
   title: "AI Word Generator - Create Word Banks From Any Scene",
   description:
@@ -13,12 +15,16 @@ export const metadata: Metadata = {
     "speech to word list",
     "printable word search generator",
   ],
+  alternates: {
+    canonical: `${baseUrl}/ai-word-generator`,
+  },
   openGraph: {
     title: "AI Word Generator - Create Word Banks From Any Scene",
     description:
       "Type or speak a scene, pick a difficulty, and get a ready-to-use English word bank for a printable word search puzzle.",
     type: "website",
     locale: "en_US",
+    url: `${baseUrl}/ai-word-generator`,
   },
   twitter: {
     card: "summary_large_image",

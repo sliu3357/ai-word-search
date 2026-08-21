@@ -1,5 +1,7 @@
 import type { Metadata } from "next"
 
+const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://wordsearchai.top"
+
 export const metadata: Metadata = {
   title: "Word Search Maker - Create Custom Puzzles Free",
   description:
@@ -11,6 +13,9 @@ export const metadata: Metadata = {
     "printable word search",
     "vocabulary worksheet maker",
   ],
+  alternates: {
+    canonical: `${baseUrl}/word-search-maker`,
+  },
 }
 
 export default function WordSearchMakerLayout({
