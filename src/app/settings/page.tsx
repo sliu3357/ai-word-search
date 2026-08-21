@@ -6,7 +6,7 @@ import { PageLayout } from "@/components/layout/PageLayout"
 import { MyCredits } from "@/components/settings/MyCredits"
 import { MyOrders } from "@/components/settings/MyOrders"
 import { cn } from "@/lib/utils"
-import { CreditCard, ShoppingBag, Sparkles } from "lucide-react"
+import { CreditCard, ShoppingBag, Sparkles, Loader2 } from "lucide-react"
 
 type TabId = "credits" | "orders"
 
@@ -17,7 +17,15 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
 
 export default function SettingsPage() {
   return (
-    <React.Suspense fallback={<div className="min-h-screen" />}>
+    <React.Suspense
+      fallback={
+        <PageLayout>
+          <div className="flex min-h-[400px] items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        </PageLayout>
+      }
+    >
       <SettingsPageContent />
     </React.Suspense>
   )

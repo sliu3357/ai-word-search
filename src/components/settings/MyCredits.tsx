@@ -93,7 +93,16 @@ export function MyCredits() {
     )
   }
 
-  if (!data) return null
+  if (!data) {
+    return (
+      <Card>
+        <CardContent className="pt-6 text-center">
+          <AlertCircle className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
+          <p className="text-muted-foreground">No credit data available. Please try again.</p>
+        </CardContent>
+      </Card>
+    )
+  }
 
   return (
     <div className="space-y-6">

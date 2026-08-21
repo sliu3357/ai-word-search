@@ -44,6 +44,13 @@ export const metadata: Metadata = {
   alternates: {
     canonical: baseUrl,
   },
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml", sizes: "any" },
+    ],
+    shortcut: [{ url: "/icon.svg", type: "image/svg+xml" }],
+    apple: [{ url: "/icon.svg", type: "image/svg+xml" }],
+  },
   openGraph: {
     type: "website",
     locale: "en_US",
@@ -52,11 +59,20 @@ export const metadata: Metadata = {
     title: "Word Search Generator - Create Custom Printable Word Puzzles Free",
     description:
       "Make custom word search puzzles with your own words. Free printable PDF and online play.",
+    images: [
+      {
+        url: "/icon.svg",
+        width: 512,
+        height: 512,
+        type: "image/svg+xml",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
     title: "Word Search Generator - Create Custom Word Puzzles",
     description: "Make custom word search puzzles with your own words. Free and easy to use.",
+    images: ["/icon.svg"],
   },
   robots: {
     index: true,

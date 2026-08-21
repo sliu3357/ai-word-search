@@ -51,7 +51,10 @@ if (process.env.NODE_ENV !== "test") {
 const trustHost =
   String(process.env.AUTH_TRUST_HOST ?? "").toLowerCase() === "true" ||
   Boolean(process.env.VERCEL) ||
-  Boolean(process.env.VERCEL_URL)
+  Boolean(process.env.VERCEL_URL) ||
+  process.env.NODE_ENV !== "production" || // 本地/测试开发环境自动信任
+  /(^|\.)localhost(:\d+)?$/i.test(process.env.AUTH_URL ?? "") ||
+  /(^|\.)127\.0\.0\.1(:\d+)?$/i.test(process.env.AUTH_URL ?? "")
 
 const providers: any[] = [
   Credentials({

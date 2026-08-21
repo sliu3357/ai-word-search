@@ -122,7 +122,16 @@ export function MyOrders() {
     )
   }
 
-  if (!data) return null
+  if (!data) {
+    return (
+      <Card>
+        <CardContent className="pt-6 text-center">
+          <AlertCircle className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
+          <p className="text-muted-foreground">No order data available. Please try again.</p>
+        </CardContent>
+      </Card>
+    )
+  }
 
   const { activeSubscription, subscriptions, orders } = data
 
