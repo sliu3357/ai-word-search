@@ -4,11 +4,11 @@ import { auth } from "@/lib/auth"
 
 /** GET /api/puzzle/[id] — 获取单个已保存的谜题（含游戏统计） */
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await auth(request)
+    const session = await auth()
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Login required" }, { status: 401 })
     }

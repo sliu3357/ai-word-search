@@ -3,9 +3,9 @@ import { getPrisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 
 /** GET /api/puzzle/history — 获取登录用户的谜题和游戏记录 */
-export async function GET(request: Request) {
+export async function GET() {
   try {
-    const session = await auth(request)
+    const session = await auth()
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Login required" }, { status: 401 })
     }

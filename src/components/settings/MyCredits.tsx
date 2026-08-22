@@ -53,42 +53,45 @@ export function MyCredits() {
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
 
-  React.useEffect(() => {
-    async function fetchCredits() {
-      try {
-        const res = await fetch("/api/credits")
-        if (res.status === 401) {
-          setError("Please log in to view your credits.")
-          setLoading(false)
-          return
-        }
-        if (res.status === 404) {
-          setError("User account not found. Please contact support.")
-          setLoading(false)
-          return
-        }
-        if (!res.ok) {
-          let msg = "Failed to load credits."
-          try {
-            const body = await res.json()
-            if (body?.error && typeof body.error === "string") {
-              msg = body.error
-            }
-          } catch {}
-          setError(msg)
-          setLoading(false)
-          return
-        }
-        const result = await res.json()
-        setData(result)
-      } catch {
-        setError("Network error. Please check your connection and try again.")
-      } finally {
+  const fetchCredits = React.useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch("/api/credits")
+      if (res.status === 401) {
+        setError("Please log in to view your credits.")
         setLoading(false)
+        return
       }
+      if (res.status === 404) {
+        setError("User account not found. Please contact support.")
+        setLoading(false)
+        return
+      }
+      if (!res.ok) {
+        let msg = "Failed to load credits."
+        try {
+          const body = await res.json()
+          if (body?.error && typeof body.error === "string") {
+            msg = body.error
+          }
+        } catch {}
+        setError(msg)
+        setLoading(false)
+        return
+      }
+      const result = await res.json()
+      setData(result)
+    } catch {
+      setError("Network error. Please check your connection and try again.")
+    } finally {
+      setLoading(false)
     }
-    fetchCredits()
   }, [])
+
+  React.useEffect(() => {
+    fetchCredits()
+  }, [fetchCredits])
 
   if (loading) {
     return (
@@ -109,12 +112,7 @@ export function MyCredits() {
             variant="outline"
             size="sm"
             className="mt-4"
-            onClick={() => {
-              setError(null)
-              setLoading(true)
-              setData(null)
-              fetchCredits()
-            }}
+            onClick={fetchCredits}
           >
             Retry
           </Button>

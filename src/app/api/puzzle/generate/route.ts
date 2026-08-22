@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
     // 获取用户信息（如果有）
     let userId: string | undefined
     try {
-      const session = await auth(request)
+      const session = await auth()
       userId = session?.user?.id
     } catch (e) {
       console.warn("[generate] auth check skipped:", (e as Error).message)
