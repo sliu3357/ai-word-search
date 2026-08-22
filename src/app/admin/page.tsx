@@ -61,17 +61,19 @@ export default function AdminDashboardPage() {
   }, [])
 
   // 数据结构防御：任何缺失字段都给默认值，避免运行时崩溃白屏
+  // 注意：defaults 必须单独定义常量，不能写在对象字面量里先显式定义属性再 spread data.totals，
+  // 否则 TypeScript 会识别为 "property specified more than once (will be overwritten)" 类型错误。
+  const totalsDefaults: StatsData["totals"] = {
+    users: 0,
+    puzzles: 0,
+    games: 0,
+    creditsInSystem: 0,
+    transactions: 0,
+    activeSubscriptions: 0,
+  }
   const safeData = data
     ? {
-        totals: {
-          users: 0,
-          puzzles: 0,
-          games: 0,
-          creditsInSystem: 0,
-          transactions: 0,
-          activeSubscriptions: 0,
-          ...(data.totals || {}),
-        },
+        totals: { ...totalsDefaults, ...(data.totals || {}) },
         tierDistribution: data.tierDistribution && typeof data.tierDistribution === "object" ? data.tierDistribution : {},
         dailyNewUsers: Array.isArray(data.dailyNewUsers) ? data.dailyNewUsers : [],
         recentUsers: Array.isArray(data.recentUsers) ? data.recentUsers : [],
