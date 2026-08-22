@@ -47,4 +47,5 @@
     "tailwindcss": "^4",
     "typescript": "^5"
   },
-  "_note": "better-sqlite3 + @prisma/adapter-better-sqlite3 intentionally removed from package manifest (production / Vercel Neon PostgreSQL path never uses them) to avoid Vercel npm install triggering native node-gyp compilation (which fails in 30s). Local devs who need SQLite adapter can run: `npm i -D better-sqlite3 @prisma/adapter-better-sqlite3`. Local node_modules already contains both (previously installed)."\n}",
+  "_note": "better-sqlite3 + @prisma/adapter-better-sqlite3 intentionally removed from package manifest (production / Vercel Neon PostgreSQL path never uses them) to avoid Vercel npm install triggering native node-gyp compilation (which fails in 30s). Local devs who need SQLite adapter can run: `npm i -D better-sqlite3 @prisma/adapter-better-sqlite3`. Local node_modules already contains both (previously installed)."
+}
