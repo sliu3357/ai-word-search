@@ -27,6 +27,23 @@ function run(cmd, args = [], opts = {}) {
   return result;
 }
 
+// Same as run() but returns a status instead of exiting — for non-critical
+// steps like "prisma migrate deploy" whose failure should not block the
+// overall build (e.g. transient DB connectivity / already-applied migrations).
+function runSoft(cmd, args = [], opts = {}) {
+  log(`> ${cmd} ${args.join(" ")}`);
+  const result = spawnSync(cmd, args, {
+    stdio: "inherit",
+    shell: process.platform === "win32",
+    ...opts,
+  });
+  if (result.status !== 0) {
+    logWarn(`Non-critical step exited with code ${result.status} — continuing build anyway.`);
+    return { ok: false, status: result.status };
+  }
+  return { ok: true, status: 0 };
+}
+
 function isPostgresUrl(url) {
   return typeof url === "string" && (url.startsWith("postgresql://") || url.startsWith("postgres://"));
 }
@@ -37,33 +54,35 @@ run("npx", ["prisma", "generate"]);
 
 // 2. prisma migrate deploy (production / Vercel only)
 log("Step 2/3: prisma migrate deploy");
-const directUrl = process.env.DIRECT_URL ?? process.env.DATABASE_URL ?? "";
+const directUrl = process.env.DIRECT_URL ?? "";
 const dbUrl = process.env.DATABASE_URL ?? "";
 
-// Prefer DIRECT_URL for migrate (Neon: non-pooled connection supports
-// schema-altering transactions). Fall back to DATABASE_URL if no DIRECT_URL.
-const migrateUrl = isPostgresUrl(process.env.DIRECT_URL)
-  ? process.env.DIRECT_URL
-  : isPostgresUrl(process.env.DATABASE_URL)
-    ? process.env.DATABASE_URL
-    : "";
+const maskUrl = (url) => {
+  if (!url) return "MISSING";
+  if (url.length <= 20) return `${url.slice(0, 8)}... (len=${url.length})`;
+  return `${url.slice(0, 12)}...${url.slice(-6)} (len=${url.length})`;
+};
+
+log(`DIRECT_URL = ${maskUrl(directUrl)} | DATABASE_URL = ${maskUrl(dbUrl)}`);
+
+// CRITICAL: prisma migrate deploy MUST use a DIRECT_URL (non-pooled, plain
+// PostgreSQL) because pooled / PgBouncer connections (typical DATABASE_URL on
+// Neon/Vercel) do not support schema-altering transactions. Using DATABASE_URL
+// as fallback for migrate deploy leads to Prisma P1015 errors. Therefore we
+// ONLY execute migrate deploy when DIRECT_URL is explicitly configured and
+// points to a postgresql:// endpoint (not a pooled one).
+const migrateUrl = isPostgresUrl(directUrl) ? directUrl : "";
 
 if (migrateUrl) {
-  log(`PostgreSQL connection detected. Running prisma migrate deploy...`);
-  run("npx", ["prisma", "migrate", "deploy"]);
+  log(`PostgreSQL DIRECT_URL detected. Running prisma migrate deploy (non-critical — failure will NOT block build)...`);
+  runSoft("npx", ["prisma", "migrate", "deploy"]);
 } else if (process.env.NODE_ENV === "production") {
   logWarn(
-    "Production build but no valid PostgreSQL DIRECT_URL/DATABASE_URL found. Skipping prisma migrate deploy. If this is Neon/Vercel production, configure DIRECT_URL env variable and redeploy."
-  );
-  logWarn(
-    "Currently: DIRECT_URL =",
-    directUrl ? `${directUrl.slice(0, 16)}... (len=${directUrl.length})` : "MISSING",
-    "| DATABASE_URL =",
-    dbUrl ? `${dbUrl.slice(0, 16)}... (len=${dbUrl.length})` : "MISSING"
+    "Production build but no valid PostgreSQL DIRECT_URL configured. Skipping prisma migrate deploy. For Neon/Vercel production, set DIRECT_URL to the NON-POOLED (direct) PostgreSQL endpoint, NOT the pooled/PgBouncer one."
   );
 } else {
   log(
-    `Local dev (non-postgresql DATABASE_URL detected: ${
+    `Local dev (non-postgresql DIRECT_URL detected: ${
       dbUrl.startsWith("file:") ? "SQLite" : "unknown"
     }). Skipping prisma migrate deploy.`
   );
