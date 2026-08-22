@@ -14,6 +14,7 @@ import {
   RotateCcw,
   Loader2,
   AlertCircle,
+  AlertTriangle,
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -36,6 +37,7 @@ interface CreditsData {
   totalPurchased: number
   totalUsed: number
   transactions: CreditTransaction[]
+  warning?: string
 }
 
 const typeIconMap: Record<string, React.ReactNode> = {
@@ -57,16 +59,30 @@ export function MyCredits() {
         const res = await fetch("/api/credits")
         if (res.status === 401) {
           setError("Please log in to view your credits.")
+          setLoading(false)
+          return
+        }
+        if (res.status === 404) {
+          setError("User account not found. Please contact support.")
+          setLoading(false)
           return
         }
         if (!res.ok) {
-          setError("Failed to load credits.")
+          let msg = "Failed to load credits."
+          try {
+            const body = await res.json()
+            if (body?.error && typeof body.error === "string") {
+              msg = body.error
+            }
+          } catch {}
+          setError(msg)
+          setLoading(false)
           return
         }
         const result = await res.json()
         setData(result)
       } catch {
-        setError("Network error. Please try again.")
+        setError("Network error. Please check your connection and try again.")
       } finally {
         setLoading(false)
       }
@@ -87,7 +103,21 @@ export function MyCredits() {
       <Card>
         <CardContent className="pt-6 text-center">
           <AlertCircle className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
-          <p className="text-muted-foreground">{error}</p>
+          <p className="font-medium text-foreground mb-1">Unable to load credits</p>
+          <p className="text-sm text-muted-foreground">{error}</p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-4"
+            onClick={() => {
+              setError(null)
+              setLoading(true)
+              setData(null)
+              fetchCredits()
+            }}
+          >
+            Retry
+          </Button>
         </CardContent>
       </Card>
     )
@@ -106,6 +136,22 @@ export function MyCredits() {
 
   return (
     <div className="space-y-6">
+      {data.warning && (
+        <Card className="border-amber-300 bg-amber-50 dark:bg-amber-950/20">
+          <CardContent className="flex items-start gap-3 pt-4">
+            <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-medium text-amber-800 dark:text-amber-200">
+                Balance loaded, but transaction history is temporarily unavailable.
+              </p>
+              <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                {data.warning}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Balance Card */}
       <Card className="overflow-hidden border-none bg-gradient-to-br from-secondary to-secondary/80 text-white">
         <CardContent className="p-6 md:p-8">

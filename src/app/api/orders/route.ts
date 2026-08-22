@@ -3,9 +3,9 @@ import { getPrisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 
 /** GET /api/orders — 获取当前用户的订阅和订单记录 */
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const session = await auth()
+    const session = await auth(request)
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Login required" }, { status: 401 })
     }

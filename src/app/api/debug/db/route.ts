@@ -6,21 +6,32 @@ import { getPrisma } from "@/lib/prisma"
  * - env 变量是否存在及其协议前缀
  * - Prisma / Neon 适配器能否成功初始化
  * - 能否成功对 users 表做一次 SELECT 1
+ * - 各关键表的 count 查询（用于诊断表是否存在）
  */
 export async function GET() {
   const dbUrl = process.env.DATABASE_URL || ""
   const directUrl = process.env.DIRECT_URL || ""
   const prefix = (u: string) => (u ? `${u.split("://")[0]}://***` : "<unset>")
 
+  const safeCount = async (name: string, fn: () => Promise<number>): Promise<number | { err: string }> => {
+    try {
+      return await fn()
+    } catch (e: any) {
+      return { err: String(e?.message || e).slice(0, 300) }
+    }
+  }
+
   try {
     const prisma = await getPrisma()
     const row: any = await prisma.$queryRawUnsafe("SELECT 1 AS ok").catch((e: any) => ({ err: String(e?.message || e).slice(0, 200) }))
-    let usersCount: number | { err: string } = -1
-    try {
-      usersCount = await prisma.user.count()
-    } catch (e: any) {
-      usersCount = { err: String(e?.message || e).slice(0, 200) }
-    }
+
+    const [usersCount, creditsCount, subsCount, puzzlesCount] = await Promise.all([
+      safeCount("users", () => prisma.user.count()),
+      safeCount("credit_transactions", () => prisma.creditTransaction.count()),
+      safeCount("subscriptions", () => prisma.subscription.count()),
+      safeCount("puzzle_histories", () => prisma.puzzleHistory.count()),
+    ])
+
     return NextResponse.json({
       ok: true,
       env: {
@@ -28,7 +39,12 @@ export async function GET() {
         DIRECT_URL: prefix(directUrl),
       },
       queryResult: Array.isArray(row) ? row[0] : row,
-      usersCount,
+      tables: {
+        users: usersCount,
+        credit_transactions: creditsCount,
+        subscriptions: subsCount,
+        puzzle_histories: puzzlesCount,
+      },
     })
   } catch (error: any) {
     const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error)

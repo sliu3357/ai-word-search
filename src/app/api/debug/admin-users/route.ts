@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic"
  *
  * 访问: GET /api/debug/admin-users
  */
-export async function GET() {
+export async function GET(request: Request) {
   try {
     // 主动触发一次 seed，便于验证 env var 是否被正确读取
     let seedTried = false
@@ -48,7 +48,7 @@ export async function GET() {
 
     let me: any = null
     try {
-      const session = await auth()
+      const session = await auth(request)
       if (session?.user?.id) {
         const dbUser = await prisma.user.findUnique({
           where: { id: session.user.id },

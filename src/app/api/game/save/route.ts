@@ -5,7 +5,7 @@ import { auth } from "@/lib/auth"
 /** POST /api/game/save — 保存游戏对局记录 */
 export async function POST(request: NextRequest) {
   try {
-    const session = await auth()
+    const session = await auth(request)
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Login required" }, { status: 401 })
     }

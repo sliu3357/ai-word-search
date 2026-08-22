@@ -2,10 +2,9 @@ import { NextResponse } from "next/server"
 import { getPrisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 
-/** GET /api/credits — 获取当前用户的积分余额和交易记录 */
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const session = await auth()
+    const session = await auth(request)
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Login required" }, { status: 401 })
     }
@@ -26,13 +25,19 @@ export async function GET() {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
-    const transactions = await prisma.creditTransaction.findMany({
-      where: { userId: session.user.id },
-      orderBy: { createdAt: "desc" },
-      take: 100,
-    })
+    let transactions: any[] = []
+    let txError: string | null = null
+    try {
+      transactions = await prisma.creditTransaction.findMany({
+        where: { userId: session.user.id },
+        orderBy: { createdAt: "desc" },
+        take: 100,
+      })
+    } catch (txErr: any) {
+      txError = txErr?.message || String(txErr)
+      console.error("[credits] Transaction query failed:", txError)
+    }
 
-    // 计算统计数据
     const totalPurchased = transactions
       .filter((t) => t.amount > 0)
       .reduce((sum, t) => sum + t.amount, 0)
@@ -40,7 +45,6 @@ export async function GET() {
       .filter((t) => t.amount < 0)
       .reduce((sum, t) => sum + Math.abs(t.amount), 0)
 
-    // 类型映射为可读的 label
     const typeLabels: Record<string, { label: string; color: string }> = {
       purchase: { label: "Purchase", color: "text-green-600" },
       gift: { label: "Gift", color: "text-blue-600" },
@@ -60,15 +64,24 @@ export async function GET() {
       isPositive: t.amount > 0,
     }))
 
-    return NextResponse.json({
+    const response: Record<string, unknown> = {
       balance: user.creditBalance,
       subscriptionTier: user.subscriptionTier,
       totalPurchased,
       totalUsed,
       transactions: formattedTransactions,
-    })
-  } catch (error) {
+    }
+
+    if (txError) {
+      response.warning = `Transaction history unavailable: ${txError}`
+    }
+
+    return NextResponse.json(response)
+  } catch (error: any) {
     console.error("[credits] Error:", error)
-    return NextResponse.json({ error: "Failed to fetch credits" }, { status: 500 })
+    return NextResponse.json(
+      { error: error?.message || "Failed to fetch credits" },
+      { status: 500 }
+    )
   }
 }

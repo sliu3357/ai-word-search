@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
     // --- Auth + credits ---------------------------------------------
     let userId: string | undefined
     try {
-      const session = await auth()
+      const session = await auth(request)
       userId = session?.user?.id
     } catch (e) {
       console.warn("[ai-generate-words] auth check skipped:", (e as Error).message)
