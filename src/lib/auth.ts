@@ -189,6 +189,9 @@ export const { handlers: rawHandlers, auth, signIn, signOut } = NextAuth({
             where: { email: token.email },
           })
           if (dbUser) {
+            // 始终使用数据库用户 ID（而非 Google/Credentials provider 的 ID）
+            // 确保后续 API 查询能匹配到数据库记录
+            token.id = dbUser.id
             token.role = dbUser.role
             token.creditBalance = dbUser.creditBalance
             token.subscriptionTier = dbUser.subscriptionTier

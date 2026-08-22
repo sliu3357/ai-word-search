@@ -12,7 +12,8 @@ export async function GET() {
 
     const prisma = await getPrisma()
 
-    const user = await prisma.user.findUnique({
+    // 先按 ID 查找，找不到再按 email 回退
+    let user = await prisma.user.findUnique({
       where: { id: session.user.id },
       select: {
         id: true,
@@ -23,20 +24,33 @@ export async function GET() {
       },
     })
 
+    if (!user && session.user.email) {
+      user = await prisma.user.findUnique({
+        where: { email: session.user.email },
+        select: {
+          id: true,
+          email: true,
+          subscriptionTier: true,
+          subscriptionStatus: true,
+          creditBalance: true,
+        },
+      })
+    }
+
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
     // 获取订阅记录
     const subscriptions = await prisma.subscription.findMany({
-      where: { userId: session.user.id },
+      where: { userId: user.id },
       orderBy: { createdAt: "desc" },
     })
 
     // 获取与订单相关的 CreditTransaction (purchase / subscription 类型)
     const orderTransactions = await prisma.creditTransaction.findMany({
       where: {
-        userId: session.user.id,
+        userId: user.id,
         type: { in: ["purchase", "subscription"] },
       },
       orderBy: { createdAt: "desc" },

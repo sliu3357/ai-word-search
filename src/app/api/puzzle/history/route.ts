@@ -12,8 +12,24 @@ export async function GET() {
 
     const prisma = await getPrisma()
 
+    // 解析实际数据库用户 ID（处理 Google OAuth ID ≠ 数据库 ID 的情况）
+    let userId = session.user.id
+    const dbUser = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { id: true },
+    })
+    if (!dbUser && session.user.email) {
+      const userByEmail = await prisma.user.findUnique({
+        where: { email: session.user.email },
+        select: { id: true },
+      })
+      if (userByEmail) {
+        userId = userByEmail.id
+      }
+    }
+
     const puzzles = await prisma.puzzleHistory.findMany({
-      where: { userId: session.user.id },
+      where: { userId },
       orderBy: { createdAt: "desc" },
       include: {
         gameRecords: {
