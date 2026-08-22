@@ -20,7 +20,7 @@ const nunito = Nunito({
   display: "swap",
 })
 
-const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://word-puzzle-generator.vercel.app"
+const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://www.wordsearchai.top"
 
 export const metadata: Metadata = {
   metadataBase: new URL(baseUrl),
@@ -123,6 +123,17 @@ export default function RootLayout({
       className={`${baloo.variable} ${nunito.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
+        {/* Domain canonicalization: redirect non-www to www before any rendering */}
+        <script dangerouslySetInnerHTML={{
+          __html: `
+            (function(){
+              var host = window.location.hostname;
+              if (host === 'wordsearchai.top') {
+                window.location.replace('https://www.wordsearchai.top' + window.location.pathname + window.location.search + window.location.hash);
+              }
+            })();
+          `,
+        }} />
         <AppSessionProvider>
           {/* Organization Schema */}
           <JsonLd data={organizationSchema} id="ld-organization" />

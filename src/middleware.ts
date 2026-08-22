@@ -54,12 +54,25 @@ function isStaticAsset(p: string) {
  *     will, because the document visit above sets the cookie.
  */
 export function middleware(request: NextRequest) {
+  const host = request.headers.get("host") || ""
+  const url = request.nextUrl.clone()
+
+  // ── Domain canonicalization: non-www → www ──────────────────────────
+  // Vercel redirects wordsearchai.top → www.wordsearchai.top at the edge,
+  // but this 308 redirect drops session cookies (different domain).
+  // Handle the redirect in middleware so cookies are preserved from the start.
+  const isProd = process.env.NODE_ENV === "production"
+  if (isProd && host === "wordsearchai.top") {
+    url.protocol = "https"
+    url.host = "www.wordsearchai.top"
+    return NextResponse.redirect(url, 308)
+  }
+
   const secret =
     process.env.VERCEL_AUTOMATION_BYPASS_SECRET || process.env.VERCEL_BYPASS_SECRET
 
   if (!secret) return NextResponse.next()
 
-  const url = request.nextUrl.clone()
   const pathname = url.pathname
   const method = request.method.toUpperCase()
 

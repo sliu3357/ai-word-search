@@ -111,14 +111,12 @@ if (googleEnabled) {
 }
 
 // 显式传入 url，确保 NextAuth 计算 redirect_uri 时用 https:// 前缀
-const authUrl = process.env.AUTH_URL || process.env.NEXTAUTH_URL || undefined
+const authUrl = process.env.AUTH_URL || process.env.NEXTAUTH_URL || "https://www.wordsearchai.top"
+
+const isProd = process.env.NODE_ENV === "production"
 
 export const { handlers: rawHandlers, auth, signIn, signOut } = NextAuth({
-  // 全开 debug，直到 Google 登录问题解决
   debug: true,
-  // 临时去掉 adapter 排查 Configuration 错误
-  // // @ts-ignore adapter 可以接受 Promise 包裹的 prisma 客户端
-  // adapter: getAdapter(),
   trustHost,
   ...(authUrl ? { url: authUrl } : {}),
   session: {
@@ -128,6 +126,49 @@ export const { handlers: rawHandlers, auth, signIn, signOut } = NextAuth({
     signIn: "/login",
   },
   providers,
+  cookies: isProd ? {
+    sessionToken: {
+      options: {
+        domain: ".wordsearchai.top",
+        path: "/",
+        httpOnly: true,
+        secure: true,
+        sameSite: "lax",
+      },
+    },
+    callbackUrl: {
+      options: {
+        domain: ".wordsearchai.top",
+        path: "/",
+        secure: true,
+        sameSite: "lax",
+      },
+    },
+    csrfToken: {
+      options: {
+        domain: ".wordsearchai.top",
+        path: "/",
+        secure: true,
+        sameSite: "lax",
+      },
+    },
+    pkceCodeVerifier: {
+      options: {
+        domain: ".wordsearchai.top",
+        path: "/",
+        secure: true,
+        sameSite: "lax",
+      },
+    },
+    state: {
+      options: {
+        domain: ".wordsearchai.top",
+        path: "/",
+        secure: true,
+        sameSite: "lax",
+      },
+    },
+  } : undefined,
   // 不要加 events.error，这个版本的 next-auth v5 类型里没有 error 事件
   callbacks: {
     async jwt({ token, user }) {
