@@ -32,6 +32,24 @@ export async function GET() {
       safeCount("puzzle_histories", () => prisma.puzzleHistory.count()),
     ])
 
+    let creditTxColumns: any[] | { err: string } = []
+    try {
+      creditTxColumns = await prisma.$queryRawUnsafe(
+        `SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_name = 'credit_transactions' ORDER BY ordinal_position`
+      ) as any[]
+    } catch (e: any) {
+      creditTxColumns = { err: String(e?.message || e).slice(0, 300) }
+    }
+
+    let sampleCreditTx: any[] | { err: string } = []
+    try {
+      sampleCreditTx = await prisma.$queryRawUnsafe(
+        `SELECT * FROM credit_transactions LIMIT 1`
+      ) as any[]
+    } catch (e: any) {
+      sampleCreditTx = { err: String(e?.message || e).slice(0, 300) }
+    }
+
     return NextResponse.json({
       ok: true,
       env: {
@@ -45,6 +63,8 @@ export async function GET() {
         subscriptions: subsCount,
         puzzle_histories: puzzlesCount,
       },
+      credit_transactions_columns: creditTxColumns,
+      credit_transactions_sample: sampleCreditTx,
     })
   } catch (error: any) {
     const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
