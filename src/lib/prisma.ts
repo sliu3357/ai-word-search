@@ -40,6 +40,16 @@ async function createAdapterFor(url: string): Promise<any> {
   }
 
   // Local SQLite fallback
+  // NOTE: Avoid static string `await import("@prisma/adapter-better-sqlite3")`
+  // because Turbopack eagerly resolves ALL import() literal strings during build,
+  // even when the branch is unreachable in production (Neon/PostgreSQL path),
+  // causing a hard Module-not-found build failure after we remove that package
+  // from the manifest (to avoid Vercel native node-gyp install crashes).
+  //
+  // Solution: construct the package name at runtime + use Node require()
+  // (which is purely runtime and opaque to the Turbopack static analyzer).
+  // Local SQLite devs who need the adapter can install it on demand via:
+  //   `npm i -D better-sqlite3 @prisma/adapter-better-sqlite3`
   const { resolve } = await import("node:path")
   const { existsSync } = await import("node:fs")
   const raw = url.startsWith("file:") ? url.slice(5) : url
@@ -47,7 +57,21 @@ async function createAdapterFor(url: string): Promise<any> {
   if (!existsSync(absolutePath)) {
     throw new Error(`[prisma] SQLite DB not found: ${absolutePath}`)
   }
-  const { PrismaBetterSqlite3 } = await import("@prisma/adapter-better-sqlite3")
+  const pkgSegments: string[] = ["@prisma", "adapter-better-sqlite3"]
+  const adapterPkg = pkgSegments.join("/") // runtime-constructed string
+  let adapterMod: any
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    adapterMod = require(adapterPkg)
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    throw new Error(
+      `[prisma] SQLite adapter not installed. To use local SQLite (file:) dev database, run:\n` +
+      `  npm i -D better-sqlite3 @prisma/adapter-better-sqlite3\n\n` +
+      `Underlying error: ${msg}`
+    )
+  }
+  const PrismaBetterSqlite3 = adapterMod.PrismaBetterSqlite3
   return new PrismaBetterSqlite3({ url: absolutePath })
 }
 
