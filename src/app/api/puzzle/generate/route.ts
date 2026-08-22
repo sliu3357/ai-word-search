@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { generateWordSearch } from "@/lib/word-search/generator"
 import type { PuzzleSettings } from "@/lib/word-search/types"
 import { getPrisma } from "@/lib/prisma"
-import { auth } from "@/lib/auth"
+import { resolveDbUserId } from "@/lib/resolve-user"
 
 /** 未登录用户每日生成限制 */
 const GUEST_DAILY_LIMIT = 3
@@ -50,10 +50,9 @@ export async function POST(request: NextRequest) {
     const result = generateWordSearch(words, finalSettings)
 
     // 获取用户信息（如果有）
-    let userId: string | undefined
+    let userId: string | null = null
     try {
-      const session = await auth()
-      userId = session?.user?.id
+      userId = await resolveDbUserId()
     } catch (e) {
       console.warn("[generate] auth check skipped:", (e as Error).message)
     }

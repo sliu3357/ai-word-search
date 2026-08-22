@@ -1,32 +1,16 @@
 import { NextResponse } from "next/server"
 import { getPrisma } from "@/lib/prisma"
-import { auth } from "@/lib/auth"
+import { resolveDbUserId } from "@/lib/resolve-user"
 
 /** GET /api/puzzle/history — 获取登录用户的谜题和游戏记录 */
 export async function GET() {
   try {
-    const session = await auth()
-    if (!session?.user?.id) {
+    const userId = await resolveDbUserId()
+    if (!userId) {
       return NextResponse.json({ error: "Login required" }, { status: 401 })
     }
 
     const prisma = await getPrisma()
-
-    // 解析实际数据库用户 ID（处理 Google OAuth ID ≠ 数据库 ID 的情况）
-    let userId = session.user.id
-    const dbUser = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { id: true },
-    })
-    if (!dbUser && session.user.email) {
-      const userByEmail = await prisma.user.findUnique({
-        where: { email: session.user.email },
-        select: { id: true },
-      })
-      if (userByEmail) {
-        userId = userByEmail.id
-      }
-    }
 
     const puzzles = await prisma.puzzleHistory.findMany({
       where: { userId },

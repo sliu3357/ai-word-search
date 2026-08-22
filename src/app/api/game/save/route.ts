@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getPrisma } from "@/lib/prisma"
-import { auth } from "@/lib/auth"
+import { resolveDbUserId } from "@/lib/resolve-user"
 
 /** POST /api/game/save — 保存游戏对局记录 */
 export async function POST(request: NextRequest) {
   try {
-    const session = await auth()
-    if (!session?.user?.id) {
+    const userId = await resolveDbUserId()
+    if (!userId) {
       return NextResponse.json({ error: "Login required" }, { status: 401 })
     }
 
@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
 
     // Verify puzzle belongs to user
     const puzzle = await prisma.puzzleHistory.findFirst({
-      where: { id: puzzleId, userId: session.user.id },
+      where: { id: puzzleId, userId },
       select: { id: true },
     })
 
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
 
     const record = await prisma.gameRecord.create({
       data: {
-        userId: session.user.id,
+        userId,
         puzzleId,
         foundWords: foundWords || [],
         completed: !!completed,

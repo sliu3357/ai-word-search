@@ -1,44 +1,25 @@
 import { NextResponse } from "next/server"
 import { getPrisma } from "@/lib/prisma"
-import { auth } from "@/lib/auth"
+import { resolveDbUserId } from "@/lib/resolve-user"
 
 export async function GET() {
   try {
-    const session = await auth()
-    if (!session?.user?.id) {
+    const userId = await resolveDbUserId()
+    if (!userId) {
       return NextResponse.json({ error: "Login required" }, { status: 401 })
     }
 
     const prisma = await getPrisma()
 
-    // 先按 session 中的 ID 查找，找不到再按 email 回退
-    let user = await prisma.user.findUnique({
-      where: { id: session.user.id },
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
       select: {
         id: true,
-        email: true,
         creditBalance: true,
         subscriptionTier: true,
         subscriptionStatus: true,
       },
     })
-
-    if (!user && session.user.email) {
-      // 回退：通过 email 查找（处理 Google OAuth ID ≠ 数据库 ID 的情况）
-      user = await prisma.user.findUnique({
-        where: { email: session.user.email },
-        select: {
-          id: true,
-          email: true,
-          creditBalance: true,
-          subscriptionTier: true,
-          subscriptionStatus: true,
-        },
-      })
-      if (user) {
-        console.log("[credits] User found via email fallback:", user.id)
-      }
-    }
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
@@ -48,7 +29,7 @@ export async function GET() {
     let txError: string | null = null
     try {
       transactions = await prisma.creditTransaction.findMany({
-        where: { userId: user.id },
+        where: { userId },
         orderBy: { createdAt: "desc" },
         take: 100,
       })

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getPrisma } from "@/lib/prisma"
-import { auth } from "@/lib/auth"
+import { resolveDbUserId } from "@/lib/resolve-user"
 
 /** GET /api/puzzle/[id] — 获取单个已保存的谜题（含游戏统计） */
 export async function GET(
@@ -8,8 +8,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await auth()
-    if (!session?.user?.id) {
+    const userId = await resolveDbUserId()
+    if (!userId) {
       return NextResponse.json({ error: "Login required" }, { status: 401 })
     }
 
@@ -21,7 +21,7 @@ export async function GET(
     const prisma = await getPrisma()
 
     const p = await prisma.puzzleHistory.findFirst({
-      where: { id, userId: session.user.id },
+      where: { id, userId },
       include: {
         gameRecords: {
           orderBy: { createdAt: "desc" },

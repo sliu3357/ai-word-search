@@ -1,20 +1,19 @@
 import { NextResponse } from "next/server"
 import { getPrisma } from "@/lib/prisma"
-import { auth } from "@/lib/auth"
+import { resolveDbUserId } from "@/lib/resolve-user"
 
 /** GET /api/orders — 获取当前用户的订阅和订单记录 */
 export async function GET() {
   try {
-    const session = await auth()
-    if (!session?.user?.id) {
+    const userId = await resolveDbUserId()
+    if (!userId) {
       return NextResponse.json({ error: "Login required" }, { status: 401 })
     }
 
     const prisma = await getPrisma()
 
-    // 先按 ID 查找，找不到再按 email 回退
-    let user = await prisma.user.findUnique({
-      where: { id: session.user.id },
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
       select: {
         id: true,
         email: true,
@@ -24,33 +23,20 @@ export async function GET() {
       },
     })
 
-    if (!user && session.user.email) {
-      user = await prisma.user.findUnique({
-        where: { email: session.user.email },
-        select: {
-          id: true,
-          email: true,
-          subscriptionTier: true,
-          subscriptionStatus: true,
-          creditBalance: true,
-        },
-      })
-    }
-
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
     // 获取订阅记录
     const subscriptions = await prisma.subscription.findMany({
-      where: { userId: user.id },
+      where: { userId },
       orderBy: { createdAt: "desc" },
     })
 
     // 获取与订单相关的 CreditTransaction (purchase / subscription 类型)
     const orderTransactions = await prisma.creditTransaction.findMany({
       where: {
-        userId: user.id,
+        userId,
         type: { in: ["purchase", "subscription"] },
       },
       orderBy: { createdAt: "desc" },
